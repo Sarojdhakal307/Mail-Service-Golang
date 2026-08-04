@@ -134,6 +134,47 @@ curl -X POST http://localhost:8080/send/template \
   }'
 ```
 
+## Postman JSON examples
+
+### 1) Single mail
+
+```json
+{
+  "to": "user@example.com",
+  "subject": "Hello",
+  "body": "Welcome to the mail service"
+}
+```
+
+### 2) Bulk mail
+
+```json
+{
+  "recipients": [
+    "user1@example.com",
+    "user2@example.com"
+  ],
+  "subject": "Bulk notification",
+  "body": "This is a bulk mail message"
+}
+```
+
+### 3) Templated mail
+
+```json
+{
+  "recipients": [
+    "user1@example.com",
+    "user2@example.com"
+  ],
+  "subject": "Hello",
+  "body": "Hello {{name}}, welcome to our service.",
+  "meta": {
+    "name": ["Alice", "Bob"]
+  }
+}
+```
+
 ## Docker
 
 ### Build image
