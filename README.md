@@ -116,6 +116,24 @@ curl -X POST http://localhost:8080/send/bulk \
   }'
 ```
 
+### Templated mail
+
+```bash
+curl -X POST http://localhost:8080/send/template \
+  -H "Content-Type: application/json" \
+  -d '{
+    "recipients": [
+      "user1@example.com",
+      "user2@example.com"
+    ],
+    "subject": "Hello",
+    "body": "Hello {{name}}, welcome to our service.",
+    "meta": {
+      "name": ["Alice", "Bob"]
+    }
+  }'
+```
+
 ## Docker
 
 ### Build image
@@ -163,6 +181,7 @@ SMTP_FROM=no-reply@example.com
 | `/health` | GET | Check if the service is running | `200 OK` with `ok` |
 | `/send` | POST | Queue a single email for sending | `202 Accepted` with `mail queued` |
 | `/send/bulk` | POST | Queue multiple emails for sending | `202 Accepted` with a count such as `2 mails queued` |
+| `/send/template` | POST | Queue templated emails using placeholders like `{{name}}` | `202 Accepted` with a count such as `2 templated mails queued` |
 
 ## Example payload fields
 
@@ -172,3 +191,4 @@ SMTP_FROM=no-reply@example.com
 | `target` | Yes, unless `to` is used | Recipient email address |
 | `subject` | No | Email subject |
 | `body` | Yes | Email body/content |
+| `meta` | No | Object used for template replacement such as `{"name": ["Alice"]}` |

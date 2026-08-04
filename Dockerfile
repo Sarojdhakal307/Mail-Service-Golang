@@ -2,7 +2,7 @@ FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
 COPY go.mod ./
-COPY main.go ./
+COPY . ./
 
 RUN go build -o /app/mailservice
 
