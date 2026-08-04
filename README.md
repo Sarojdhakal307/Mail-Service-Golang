@@ -134,46 +134,20 @@ curl -X POST http://localhost:8080/send/template \
   }'
 ```
 
-## Postman JSON examples
+## Postman collection
 
-### 1) Single mail
+A ready-to-import Postman collection is available at [postman_collection.json](postman_collection.json).
 
-```json
-{
-  "to": "user@example.com",
-  "subject": "Hello",
-  "body": "Welcome to the mail service"
-}
-```
+### Import into Postman
 
-### 2) Bulk mail
-
-```json
-{
-  "recipients": [
-    "user1@example.com",
-    "user2@example.com"
-  ],
-  "subject": "Bulk notification",
-  "body": "This is a bulk mail message"
-}
-```
-
-### 3) Templated mail
-
-```json
-{
-  "recipients": [
-    "user1@example.com",
-    "user2@example.com"
-  ],
-  "subject": "Hello",
-  "body": "Hello {{name}}, welcome to our service.",
-  "meta": {
-    "name": ["Alice", "Bob"]
-  }
-}
-```
+1. Open Postman.
+2. Click Import.
+3. Select [postman_collection.json](postman_collection.json).
+4. The collection will appear with requests for:
+   - Health check
+   - Single mail
+   - Bulk mail
+   - Templated mail
 
 ## Docker
 

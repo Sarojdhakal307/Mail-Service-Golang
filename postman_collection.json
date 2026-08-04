@@ -1,0 +1,84 @@
+{
+  "info": {
+    "name": "Mail Service API",
+    "description": "Collection for single, bulk, and templated mail requests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/health",
+          "host": ["http://localhost:8080/health"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Send Single Mail",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"user@example.com\",\n  \"subject\": \"Hello\",\n  \"body\": \"Welcome to the mail service\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/send",
+          "host": ["http://localhost:8080/send"],
+          "path": ["send"]
+        }
+      }
+    },
+    {
+      "name": "Send Bulk Mail",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipients\": [\n    \"user1@example.com\",\n    \"user2@example.com\"\n  ],\n  \"subject\": \"Bulk notification\",\n  \"body\": \"This is a bulk mail message\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/send/bulk",
+          "host": ["http://localhost:8080/send/bulk"],
+          "path": ["send", "bulk"]
+        }
+      }
+    },
+    {
+      "name": "Send Templated Mail",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipients\": [\n    \"user1@example.com\",\n    \"user2@example.com\"\n  ],\n  \"subject\": \"Hello\",\n  \"body\": \"Hello {{name}}, welcome to our service.\",\n  \"meta\": {\n    \"name\": [\"Alice\", \"Bob\"]\n  }\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/send/template",
+          "host": ["http://localhost:8080/send/template"],
+          "path": ["send", "template"]
+        }
+      }
+    }
+  ]
+}
