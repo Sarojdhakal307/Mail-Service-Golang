@@ -93,6 +93,7 @@ func (s *MailService) Start() {
 					if !ok {
 						return
 					}
+					log.Printf("worker %d picked job for recipient %s from queue", workerID, msg.To)
 					if err := s.sender.Send(context.Background(), msg); err != nil {
 						log.Printf("worker %d failed to send mail: %v", workerID, err)
 					}
@@ -113,6 +114,7 @@ func (s *MailService) Enqueue(msg types.MailMessage) error {
 	msg.To = recipient
 	select {
 	case s.queue <- msg:
+		log.Printf("queued mail for recipient %s", msg.To)
 		return nil
 	case <-s.stop:
 		return fmt.Errorf("mail service is shutting down")
