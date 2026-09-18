@@ -17,6 +17,7 @@ const VIEWS = {
   keys: { title: "API keys", sub: "Create keys, set limits and watch usage." },
   requests: { title: "Access requests", sub: "Review API key requests submitted from the public site." },
   logs: { title: "Request log", sub: "Every authenticated request, newest first." },
+  compose: { title: "Compose mail", sub: "Send an email as any API key, through its SMTP server and limits." },
 };
 
 // ---------- helpers ----------
@@ -48,11 +49,24 @@ function el(tag, props, ...children) {
     else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
     else node.setAttribute(k, v === true ? "" : v);
   }
-  for (const c of children.flat()) {
+  appendChildren(node, children);
+  return node;
+}
+
+// appendChildren flattens nested arrays and skips null, undefined and false, so callers can
+// pass conditional children like `cond && el(...)`.
+function appendChildren(node, children) {
+  for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
     node.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
-  return node;
+}
+
+// setChildren replaces a node's children using the same rules as el(). Use it instead of
+// replaceChildren, which neither flattens arrays nor skips empty values.
+function setChildren(node, ...children) {
+  node.replaceChildren();
+  appendChildren(node, children);
 }
 
 const ICONS = {
@@ -66,6 +80,7 @@ const ICONS = {
   inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
 };
 
 // icon returns an SVG built from the fixed ICONS table above (never from user data).
@@ -164,6 +179,7 @@ function setView(name) {
     a.classList.toggle("active", active);
     if (active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
+  document.querySelector(".stats").classList.toggle("hidden", name === "compose");
   $("page-title").textContent = VIEWS[name].title;
   $("page-sub").textContent = VIEWS[name].sub;
   document.title = VIEWS[name].title + " · Mail Service Admin";
@@ -198,6 +214,7 @@ function renderAll() {
   renderRequests();
   renderLogFilter();
   renderLogs();
+  renderComposeKeys();
 }
 
 // ---------- stats ----------
@@ -253,7 +270,7 @@ function keyMatches(key) {
 
 function renderKeys() {
   const body = $("keys-body");
-  body.replaceChildren();
+  setChildren(body);
   if (!state.keys.length) {
     body.append(emptyState("key", "No API keys yet", "Create your first key, or approve an access request.", 7));
     return;
@@ -389,7 +406,7 @@ function openKeyDialog(mode) {
     f.address.value = [r.email, r.phone, r.address].filter(Boolean).join(" · ");
     f.allowed_ips.value = r.caller_ips || "*";
     const summary = $("approve-summary");
-    summary.replaceChildren(
+    setChildren(summary,
       el("strong", { text: r.name }), " <" + r.email + ">", r.phone && " · " + r.phone,
       r.expected_volume && el("span", { text: " · expects " + r.expected_volume + " mails/month" }));
     summary.classList.remove("hidden");
@@ -528,13 +545,172 @@ $("test-form").addEventListener("submit", async (e) => {
   }
 });
 
+// ---------- compose ----------
+
+const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+// parseRecipients splits the To field into unique addresses and reports invalid entries.
+// "Name <a@b.c>" is accepted; the server validates again.
+function parseRecipients(text) {
+  const valid = [];
+  const invalid = [];
+  const seen = new Set();
+  for (const part of text.split(/[,;\n]+/)) {
+    const entry = part.trim();
+    if (!entry) continue;
+    const match = entry.match(/<([^>]+)>\s*$/);
+    const addr = (match ? match[1] : entry).trim();
+    if (!EMAIL_RE.test(addr)) {
+      invalid.push(entry);
+      continue;
+    }
+    const key = addr.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      valid.push(entry);
+    }
+  }
+  return { valid, invalid };
+}
+
+function selectedComposeKey() {
+  const id = Number($("compose-key").value);
+  return state.keys.find((k) => k.id === id) || null;
+}
+
+function renderComposeKeys() {
+  const select = $("compose-key");
+  const current = select.value;
+  const active = state.keys.filter((k) => k.active);
+  const disabled = state.keys.filter((k) => !k.active);
+  setChildren(select,
+    el("option", { value: "", text: state.keys.length ? "Choose a key…" : "No API keys yet" }),
+    ...active.map((k) => el("option", { value: String(k.id), text: k.name + " · " + k.key_prefix + "…" + (k.smtp ? " · " + k.smtp.host : "") })),
+    ...(disabled.length ? [el("optgroup", { label: "Disabled keys" },
+      disabled.map((k) => el("option", { value: String(k.id), disabled: true, text: k.name + " · " + k.key_prefix + "…" })))] : []));
+  select.value = active.some((k) => String(k.id) === current) ? current : "";
+  renderComposeSide();
+}
+
+function remaining(key) {
+  if (key.is_super) return null;
+  let best = null;
+  for (const w of ["hour", "day", "week", "month"]) {
+    const limit = key.limits[w];
+    if (!limit) continue;
+    const left = Math.max(0, limit - (key.usage ? key.usage[w] : 0));
+    if (best === null || left < best.left) best = { left, window: w };
+  }
+  return best;
+}
+
+function renderComposeSide() {
+  const side = $("compose-side");
+  const key = selectedComposeKey();
+  if (!key) {
+    setChildren(side, el("h3", { text: "Sending as" }),
+      emptyState("key", "Choose an API key", "The message is sent through that key's SMTP server and counted against its limits."));
+    return;
+  }
+  const left = remaining(key);
+  const recipients = parseRecipients($("compose-form").elements.recipients.value).valid.length;
+  let quota;
+  if (!left) {
+    quota = el("dd", { text: key.is_super ? "Unlimited (super key)" : "Unlimited" });
+  } else {
+    const enough = recipients <= left.left;
+    quota = el("dd", {},
+      el("span", { class: enough ? "" : "bad", text: fmt(left.left) + " mail" + (left.left === 1 ? "" : "s") + " left this " + left.window }),
+      recipients > 0 && !enough && el("span", { class: "sub bad", text: "This message needs " + fmt(recipients) + ", so it will be rejected." }));
+  }
+  setChildren(side,
+    el("h3", { text: "Sending as" }),
+    el("div", { class: "side-key" },
+      el("div", { class: "secret-icon" }, icon("key")),
+      el("div", {}, el("strong", { text: key.name }), el("code", { text: key.key_prefix + "…" }))),
+    el("dl", { class: "side-rows" },
+      el("div", {}, el("dt", { text: "From" }), el("dd", { text: key.smtp ? key.smtp.from : "Default From address (service settings)" })),
+      el("div", {}, el("dt", { text: "SMTP server" }), el("dd", { class: key.smtp ? "mono" : "", text: key.smtp ? key.smtp.host + ":" + key.smtp.port : "Default server" })),
+      el("div", {}, el("dt", { text: "Limits" }), quota)),
+    !key.is_super && el("div", { class: "usage-box" }, usageCell(key)),
+    el("p", { class: "side-note", text: "Counted against this key's limits and recorded in its request log as /admin/compose. The key's IP allow list does not apply to mail you send from here." }));
+}
+
+function updateComposeHints() {
+  const f = $("compose-form").elements;
+  const { valid, invalid } = parseRecipients(f.recipients.value);
+  const hint = $("compose-count");
+  if (!valid.length && !invalid.length) {
+    hint.textContent = "Separate addresses with commas or new lines. Up to 500 per message.";
+  } else {
+    setChildren(hint,
+      el("span", { class: valid.length ? "good" : "", text: valid.length + " recipient" + (valid.length === 1 ? "" : "s") }),
+      invalid.length ? el("span", { class: "bad", text: " · invalid: " + invalid.slice(0, 3).join(", ") + (invalid.length > 3 ? "…" : "") }) : null);
+  }
+  if (invalid.length) f.recipients.setAttribute("aria-invalid", "true"); else f.recipients.removeAttribute("aria-invalid");
+  $("compose-chars").textContent = fmt(f.body.value.length);
+  $("compose-submit-label").textContent = valid.length > 1 ? "Send to " + valid.length : "Send";
+  renderComposeSide();
+}
+
+function clearCompose() {
+  const f = $("compose-form").elements;
+  f.recipients.value = "";
+  f.subject.value = "";
+  f.body.value = "";
+  setError("compose-error", "");
+  updateComposeHints();
+}
+
+$("compose-key").addEventListener("change", renderComposeSide);
+$("compose-form").addEventListener("input", (e) => { if (e.target.name !== "key_id") updateComposeHints(); });
+$("compose-clear").addEventListener("click", clearCompose);
+
+$("compose-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = $("compose-form").elements;
+  const key = selectedComposeKey();
+  const { valid, invalid } = parseRecipients(f.recipients.value);
+  const fail = (message, field) => { setError("compose-error", message); if (field) field.focus(); };
+
+  if (!key) return fail("Choose the API key to send with.", f.key_id);
+  if (invalid.length) return fail("Fix the invalid address" + (invalid.length > 1 ? "es" : "") + ": " + invalid.join(", "), f.recipients);
+  if (!valid.length) return fail("Add at least one recipient.", f.recipients);
+  if (valid.length > 500) return fail("Send to at most 500 recipients at a time.", f.recipients);
+  if (!f.body.value.trim()) return fail("Write a message.", f.body);
+  if (!f.subject.value.trim()) {
+    const ok = await confirmAction("Send without a subject?", "Messages without a subject are more likely to be ignored or marked as spam.", "Send anyway");
+    if (!ok) return;
+  } else if (valid.length >= 10) {
+    const ok = await confirmAction("Send to " + valid.length + " recipients?",
+      "Each recipient gets a separate email from “" + key.name + "”, and " + valid.length + " mails are counted against its limits.", "Send " + valid.length + " emails");
+    if (!ok) return;
+  }
+
+  const button = $("compose-submit");
+  button.disabled = true;
+  $("compose-submit-label").textContent = "Sending…";
+  setError("compose-error", "");
+  try {
+    const res = await api("POST", "/compose", { key_id: key.id, recipients: valid, subject: f.subject.value, body: f.body.value });
+    toast(res.message);
+    clearCompose();
+    await refresh();
+  } catch (err) {
+    fail(err.message);
+  } finally {
+    button.disabled = false;
+    updateComposeHints();
+  }
+});
+
 // ---------- requests ----------
 
 const REQUEST_BADGE = { pending: "badge-warning", approved: "badge-success", rejected: "badge-neutral" };
 
 function renderRequests() {
   const list = $("requests-list");
-  list.replaceChildren();
+  setChildren(list);
   const items = state.requests.filter((r) => state.requestFilter === "all" || r.status === state.requestFilter);
   if (!items.length) {
     const msg = state.requestFilter === "pending" ? "You're all caught up. New requests from the public site will appear here." : "Nothing to show for this filter.";
@@ -600,7 +776,7 @@ const LOG_LABEL = { accepted: "Accepted", limit_exceeded: "Limit exceeded", ip_d
 function renderLogFilter() {
   const select = $("log-filter");
   const current = select.value;
-  select.replaceChildren(el("option", { value: "0", text: "All keys" }),
+  setChildren(select, el("option", { value: "0", text: "All keys" }),
     state.keys.map((k) => el("option", { value: String(k.id), text: k.name })));
   select.value = state.keys.some((k) => String(k.id) === current) ? current : "0";
 }
@@ -616,7 +792,7 @@ async function loadLogs() {
 
 function renderLogs() {
   const body = $("logs-body");
-  body.replaceChildren();
+  setChildren(body);
   const status = $("log-status").value;
   const logs = state.logs.filter((l) => !status || l.status === status);
   if (!logs.length) {

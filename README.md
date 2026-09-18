@@ -67,6 +67,7 @@ The admin UI at `/admin/` is protected by the super user account from `SUPERUSER
 - Edit, disable/enable or delete keys.
 - See each key's current usage against its limits, when and from which IP it was last used, and which IP created it.
 - Browse the request log (all keys or one key), filtered by status: time, key, IP, endpoint, mail count, status and message.
+- **Compose mail** (under Resources): send an email as any active API key. Pick a key, add up to 500 recipients (commas or new lines, `Name <email>` accepted), a subject and a message. The side panel shows the key's From address, SMTP server and remaining quota. The mail goes out exactly as if the key's client had sent it: through the key's SMTP server, counted against its limits, and logged as `/admin/compose`. The key's IP allow list doesn't apply, because the super user is sending. Disabled keys can't be used.
 - Review **access requests** from the public site. **Approve & create key** opens the key form prefilled from the request (name, contact, server IPs), then creates the key and marks the request approved in one step. **Reject** marks it rejected. A request can only be reviewed once.
 
 Security notes:

@@ -40,6 +40,7 @@ type Store interface {
 	RevealKey(ctx context.Context, id int64) (string, error)
 	GetKey(ctx context.Context, id int64) (*store.APIKey, error)
 	SMTPConfig(key *store.APIKey) (*types.SMTPConfig, error)
+	Reserve(ctx context.Context, key *store.APIKey, entry store.RequestLog, n int) error
 	ListLogs(ctx context.Context, keyID int64, limit int) ([]store.RequestLog, error)
 	ListKeyRequests(ctx context.Context) ([]*store.KeyRequest, error)
 	ApproveKeyRequest(ctx context.Context, id int64, in store.KeyInput, adminIP string) (*store.APIKey, string, error)
@@ -55,6 +56,8 @@ type Config struct {
 	DefaultSMTP *types.SMTPConfig
 	// SendTest delivers a message synchronously, for the "send test email" action.
 	SendTest func(ctx context.Context, cfg types.SMTPConfig, msg types.MailMessage) error
+	// Enqueue hands a message to the delivery queue, for mail composed in the admin UI.
+	Enqueue func(msg types.MailMessage) error
 }
 
 type Handler struct {
@@ -99,6 +102,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/api/keys/{id}/disable", h.requireSession(h.setActive(false)))
 	mux.HandleFunc("DELETE /admin/api/keys/{id}", h.requireSession(h.deleteKey))
 	mux.HandleFunc("GET /admin/api/logs", h.requireSession(h.listLogs))
+	mux.HandleFunc("POST /admin/api/compose", h.requireSession(h.compose))
 	mux.HandleFunc("GET /admin/api/requests", h.requireSession(h.listRequests))
 	mux.HandleFunc("POST /admin/api/requests/{id}/approve", h.requireSession(h.approveRequest))
 	mux.HandleFunc("POST /admin/api/requests/{id}/reject", h.requireSession(h.rejectRequest))
@@ -444,11 +448,15 @@ func (h *Handler) writeRequestError(w http.ResponseWriter, err error) bool {
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(v); err != nil {
+	if err := decodeLimit(w, r, v, 64<<10); err != nil {
 		auth.WriteJSON(w, http.StatusBadRequest, errBody("invalid JSON"))
 		return false
 	}
 	return true
+}
+
+func decodeLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) error {
+	return json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(v)
 }
 
 func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {

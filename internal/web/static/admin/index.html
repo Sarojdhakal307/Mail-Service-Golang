@@ -57,6 +57,10 @@
           Request log
         </a>
         <p class="side-title">Resources</p>
+        <a href="#compose" data-view="compose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          Compose mail
+        </a>
         <a href="/" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           Public site
@@ -139,6 +143,37 @@
             </div>
           </div>
           <div id="requests-list" class="request-list"></div>
+        </section>
+
+        <!-- Compose -->
+        <section class="view hidden" id="view-compose">
+          <div class="compose-grid">
+            <form id="compose-form" class="card compose-card" novalidate>
+              <div class="card-head"><h2>New message</h2></div>
+              <div class="compose-body">
+                <label class="field"><span>Send with API key <span class="req">*</span></span>
+                  <select class="select" name="key_id" id="compose-key"></select></label>
+                <label class="field"><span>To <span class="req">*</span></span>
+                  <textarea class="textarea recipients" name="recipients" rows="3" placeholder="ada@example.com, grace@example.com" spellcheck="false"></textarea>
+                  <span class="hint" id="compose-count">Separate addresses with commas or new lines. Up to 500 per message.</span></label>
+                <label class="field"><span>Subject</span>
+                  <input class="input" name="subject" maxlength="998" placeholder="What is this email about?"></label>
+                <label class="field"><span>Message <span class="req">*</span></span>
+                  <textarea class="textarea message" name="body" rows="12" placeholder="Write your message…"></textarea>
+                  <span class="hint"><span id="compose-chars">0</span> characters · sent as plain text</span></label>
+                <div id="compose-error" class="form-error hidden" role="alert"></div>
+              </div>
+              <div class="compose-foot">
+                <button class="btn btn-ghost" type="button" id="compose-clear">Clear</button>
+                <span class="spacer"></span>
+                <button class="btn btn-primary" type="submit" id="compose-submit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                  <span id="compose-submit-label">Send</span>
+                </button>
+              </div>
+            </form>
+            <aside class="card compose-side" id="compose-side" aria-live="polite"></aside>
+          </div>
         </section>
 
         <!-- Logs -->

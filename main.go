@@ -54,6 +54,9 @@ func main() {
 		log.Printf("disabled %d super key(s) from a previous SUPER_API_KEY value", revoked)
 	}
 
+	mailService := services.NewMailService(mailWorkers, services.NewSMTPMailer())
+	mailService.Start()
+
 	adminHandler, err := admin.New(db, admin.Config{
 		Username:     os.Getenv("SUPERUSER_USERNAME"),
 		Password:     os.Getenv("SUPERUSER_PASSWORD"),
@@ -61,13 +64,11 @@ func main() {
 		TrustProxy:   trustProxy,
 		DefaultSMTP:  services.DefaultSMTPConfig(),
 		SendTest:     services.SendTest,
+		Enqueue:      mailService.Enqueue,
 	})
 	if err != nil {
 		log.Fatalf("admin configuration error: %v", err)
 	}
-
-	mailService := services.NewMailService(mailWorkers, services.NewSMTPMailer())
-	mailService.Start()
 
 	mux := http.NewServeMux()
 	routes.RegisterRoutes(mux, mailService, db)
