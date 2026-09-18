@@ -19,9 +19,11 @@ import (
 
 const maxBodyBytes = 1 << 20
 
-// Quota records a request against the caller's API key and enforces its limits.
+// Quota records a request against the caller's API key and enforces its limits, and
+// resolves the SMTP server the key sends through.
 type Quota interface {
 	Reserve(ctx context.Context, key *store.APIKey, entry store.RequestLog, n int) error
+	SMTPConfig(key *store.APIKey) (*types.SMTPConfig, error)
 }
 
 func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota Quota) {
@@ -50,9 +52,11 @@ func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota
 			return
 		}
 
-		if !reserve(w, r, quota, 1) {
+		smtp, ok := reserve(w, r, quota, 1)
+		if !ok {
 			return
 		}
+		msg.SMTP = smtp
 
 		if err := mailService.Enqueue(msg); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -84,13 +88,14 @@ func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota
 			return
 		}
 
-		if !reserve(w, r, quota, len(recipients)) {
+		smtp, ok := reserve(w, r, quota, len(recipients))
+		if !ok {
 			return
 		}
 
 		queued := 0
 		for _, recipient := range recipients {
-			msg := types.MailMessage{To: recipient, Subject: req.Subject, Body: req.Body}
+			msg := types.MailMessage{To: recipient, Subject: req.Subject, Body: req.Body, SMTP: smtp}
 			if err := mailService.Enqueue(msg); err != nil {
 				log.Printf("bulk enqueue failed for %s: %v", recipient, err)
 				continue
@@ -122,14 +127,15 @@ func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota
 			return
 		}
 
-		if !reserve(w, r, quota, len(recipients)) {
+		smtp, ok := reserve(w, r, quota, len(recipients))
+		if !ok {
 			return
 		}
 
 		queued := 0
 		for _, recipient := range recipients {
 			body := services.RenderTemplate(req.Body, req.Meta)
-			msg := types.MailMessage{To: recipient, Subject: req.Subject, Body: body}
+			msg := types.MailMessage{To: recipient, Subject: req.Subject, Body: body, SMTP: smtp}
 			if err := mailService.Enqueue(msg); err != nil {
 				log.Printf("template enqueue failed for %s: %v", recipient, err)
 				continue
@@ -152,19 +158,29 @@ func nonBlank(values []string) []string {
 	return out
 }
 
-// reserve charges n mails to the caller's API key. It writes the error response and
-// returns false when the request must not proceed.
-func reserve(w http.ResponseWriter, r *http.Request, quota Quota, n int) bool {
+// reserve resolves the caller's SMTP server and charges n mails to its API key. It returns
+// the SMTP server to use (nil for the default), or writes the error response and returns
+// false when the request must not proceed.
+func reserve(w http.ResponseWriter, r *http.Request, quota Quota, n int) (*types.SMTPConfig, bool) {
 	caller, ok := auth.CallerFrom(r.Context())
 	if !ok {
 		auth.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing API key"})
-		return false
+		return nil, false
+	}
+
+	// Load SMTP settings first so a broken configuration does not use up the key's limits.
+	smtp, err := quota.SMTPConfig(caller.Key)
+	if err != nil {
+		log.Printf("smtp config for key %d: %v", caller.Key.ID, err)
+		auth.WriteJSON(w, http.StatusInternalServerError,
+			map[string]string{"error": "the SMTP settings for this API key could not be loaded; contact the administrator"})
+		return nil, false
 	}
 
 	entry := store.RequestLog{IP: caller.IP, Method: r.Method, Path: r.URL.Path, UserAgent: r.UserAgent()}
-	err := quota.Reserve(r.Context(), caller.Key, entry, n)
+	err = quota.Reserve(r.Context(), caller.Key, entry, n)
 	if err == nil {
-		return true
+		return smtp, true
 	}
 
 	var limitErr *store.LimitError
@@ -181,10 +197,10 @@ func reserve(w http.ResponseWriter, r *http.Request, quota Quota, n int) bool {
 			"requested": limitErr.Requested,
 			"retry_at":  limitErr.RetryAt,
 		})
-		return false
+		return nil, false
 	}
 
 	log.Printf("quota check failed: %v", err)
 	auth.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "could not verify usage limits, try again"})
-	return false
+	return nil, false
 }

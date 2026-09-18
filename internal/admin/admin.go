@@ -11,12 +11,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"mailservice/internal/auth"
 	"mailservice/internal/store"
+	"mailservice/internal/types"
 )
 
 const (
@@ -35,6 +38,8 @@ type Store interface {
 	SetKeyActive(ctx context.Context, id int64, active bool) error
 	DeleteKey(ctx context.Context, id int64) error
 	RevealKey(ctx context.Context, id int64) (string, error)
+	GetKey(ctx context.Context, id int64) (*store.APIKey, error)
+	SMTPConfig(key *store.APIKey) (*types.SMTPConfig, error)
 	ListLogs(ctx context.Context, keyID int64, limit int) ([]store.RequestLog, error)
 	ListKeyRequests(ctx context.Context) ([]*store.KeyRequest, error)
 	ApproveKeyRequest(ctx context.Context, id int64, in store.KeyInput, adminIP string) (*store.APIKey, string, error)
@@ -46,6 +51,10 @@ type Config struct {
 	Password     string
 	SecureCookie bool
 	TrustProxy   bool
+	// DefaultSMTP is used by keys without their own SMTP server; nil means simulation mode.
+	DefaultSMTP *types.SMTPConfig
+	// SendTest delivers a message synchronously, for the "send test email" action.
+	SendTest func(ctx context.Context, cfg types.SMTPConfig, msg types.MailMessage) error
 }
 
 type Handler struct {
@@ -85,6 +94,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/api/keys", h.requireSession(h.createKey))
 	mux.HandleFunc("PUT /admin/api/keys/{id}", h.requireSession(h.updateKey))
 	mux.HandleFunc("GET /admin/api/keys/{id}/secret", h.requireSession(h.revealKey))
+	mux.HandleFunc("POST /admin/api/keys/{id}/smtp-test", h.requireSession(h.testSMTP))
 	mux.HandleFunc("POST /admin/api/keys/{id}/enable", h.requireSession(h.setActive(true)))
 	mux.HandleFunc("POST /admin/api/keys/{id}/disable", h.requireSession(h.setActive(false)))
 	mux.HandleFunc("DELETE /admin/api/keys/{id}", h.requireSession(h.deleteKey))
@@ -272,6 +282,68 @@ func (h *Handler) revealKey(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		auth.WriteJSON(w, http.StatusOK, map[string]string{"api_key": raw})
 	}
+}
+
+// testSMTP sends a test email through the SMTP server the key would use and reports the
+// server's answer, so settings can be checked before clients rely on them.
+func (h *Handler) testSMTP(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		To string `json:"to"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	addr, err := mail.ParseAddress(strings.TrimSpace(body.To))
+	if err != nil {
+		auth.WriteJSON(w, http.StatusBadRequest, errBody("enter a valid recipient email address"))
+		return
+	}
+
+	key, err := h.store.GetKey(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		auth.WriteJSON(w, http.StatusNotFound, errBody("API key not found"))
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	cfg, err := h.store.SMTPConfig(key)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	source := "this key's SMTP server"
+	if cfg == nil {
+		cfg, source = h.cfg.DefaultSMTP, "the default SMTP server"
+	}
+	if cfg == nil {
+		auth.WriteJSON(w, http.StatusBadRequest,
+			errBody("no SMTP server is configured for this key and there is no default, so mail is only simulated"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	msg := types.MailMessage{
+		To:      addr.Address,
+		Subject: "Mail Service test email",
+		Body: "This is a test email from Mail Service.\n\nAPI key: " + key.Name + " (" + key.KeyPrefix + "...)\n" +
+			"SMTP server: " + cfg.Host + ":" + cfg.Port + "\nFrom: " + cfg.From + "\n\nIf you received this, the SMTP settings work.",
+	}
+	if err := h.cfg.SendTest(ctx, *cfg, msg); err != nil {
+		log.Printf("admin: SMTP test for key %d via %s:%s failed: %v", id, cfg.Host, cfg.Port, err)
+		auth.WriteJSON(w, http.StatusBadGateway, errBody("sending through "+source+" ("+cfg.Host+":"+cfg.Port+") failed: "+err.Error()))
+		return
+	}
+	log.Printf("admin: SMTP test for key %d sent to %s via %s:%s", id, addr.Address, cfg.Host, cfg.Port)
+	auth.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": "Test email sent to " + addr.Address + " through " + source + " (" + cfg.Host + ":" + cfg.Port + ").",
+	})
 }
 
 func (h *Handler) setActive(active bool) http.HandlerFunc {

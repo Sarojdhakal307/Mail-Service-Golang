@@ -65,6 +65,7 @@ const ICONS = {
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
   inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
 };
 
 // icon returns an SVG built from the fixed ICONS table above (never from user data).
@@ -254,12 +255,12 @@ function renderKeys() {
   const body = $("keys-body");
   body.replaceChildren();
   if (!state.keys.length) {
-    body.append(emptyState("key", "No API keys yet", "Create your first key, or approve an access request.", 6));
+    body.append(emptyState("key", "No API keys yet", "Create your first key, or approve an access request.", 7));
     return;
   }
   const keys = state.keys.filter(keyMatches);
   if (!keys.length) {
-    body.append(emptyState("key", "No matching keys", "Try a different search or filter.", 6));
+    body.append(emptyState("key", "No matching keys", "Try a different search or filter.", 7));
     return;
   }
 
@@ -276,6 +277,7 @@ function renderKeys() {
       key.recoverable
         ? iconButton("copy", "Copy API key", (e) => copyKey(key, e.currentTarget))
         : el("button", { type: "button", class: "btn btn-ghost btn-icon", disabled: true, title: "Created before keys could be revealed", "aria-label": "Key cannot be revealed" }, icon("copy")),
+      iconButton("mail", "Send test email", () => openTestDialog(key)),
       iconButton("edit", "Edit key", () => openKeyDialog({ type: "edit", key })),
       iconButton(key.active ? "pause" : "play", key.active ? "Disable key" : "Enable key", () => toggleKey(key)),
       iconButton("logs", "View request log", () => { $("log-filter").value = String(key.id); location.hash = "logs"; loadLogs(); }),
@@ -288,12 +290,20 @@ function renderKeys() {
         el("code", { class: "key-prefix", text: key.key_prefix + "…" })),
       el("td", {}, ips),
       el("td", {}, usageCell(key)),
+      el("td", {}, smtpCell(key)),
       el("td", {}, status),
       el("td", { class: "nowrap", title: fullTime(key.last_used_at) },
         el("span", { text: relTime(key.last_used_at) }),
         key.last_used_ip && el("span", { class: "sub mono", text: key.last_used_ip })),
       el("td", {}, actions)));
   }
+}
+
+function smtpCell(key) {
+  if (!key.smtp) return el("span", { class: "muted small", text: "Default server" });
+  return el("div", { class: "smtp-cell", title: key.smtp.host + ":" + key.smtp.port + " · " + key.smtp.from },
+    el("span", { class: "mono", text: key.smtp.host + ":" + key.smtp.port }),
+    el("span", { class: "sub", text: key.smtp.from }));
 }
 
 async function copyKey(key, button) {
@@ -363,6 +373,13 @@ function openKeyDialog(mode) {
     f.limit_week.value = k.limits.week;
     f.limit_month.value = k.limits.month;
     f.is_super.checked = k.is_super;
+    if (k.smtp) {
+      f.smtp_enabled.checked = true;
+      f.smtp_host.value = k.smtp.host;
+      f.smtp_port.value = k.smtp.port;
+      f.smtp_username.value = k.smtp.username;
+      f.smtp_from.value = k.smtp.from;
+    }
   } else if (mode.type === "approve") {
     const r = mode.request;
     $("key-dialog-title").textContent = "Approve request";
@@ -382,7 +399,13 @@ function openKeyDialog(mode) {
     $("key-submit").textContent = "Create key";
     f.allowed_ips.value = "*";
   }
+  const hasPassword = mode.type === "edit" && mode.key.smtp && mode.key.smtp.has_password;
+  f.smtp_password.placeholder = hasPassword ? "•••••••• (saved)" : "App password";
+  $("smtp-password-hint").textContent = hasPassword
+    ? "Leave blank to keep the saved password. Clearing the username removes it."
+    : "Stored encrypted. Never shown again.";
   syncSuper();
+  syncSMTP();
   $("key-dialog").showModal();
   f.name.focus();
 }
@@ -391,6 +414,10 @@ function syncSuper() {
   const f = $("key-form").elements;
   $("limits-fieldset").disabled = f.is_super.checked;
   f.allowed_ips.disabled = f.is_super.checked;
+}
+
+function syncSMTP() {
+  $("smtp-fields").classList.toggle("hidden", !$("key-form").elements.smtp_enabled.checked);
 }
 
 function formInput() {
@@ -402,6 +429,13 @@ function formInput() {
     allowed_ips: f.allowed_ips.value.split(/[\s,]+/).filter(Boolean),
     is_super: f.is_super.checked,
     limits: { hour: num("limit_hour"), day: num("limit_day"), week: num("limit_week"), month: num("limit_month") },
+    smtp: f.smtp_enabled.checked ? {
+      host: f.smtp_host.value,
+      port: f.smtp_port.value,
+      username: f.smtp_username.value,
+      password: f.smtp_password.value,
+      from: f.smtp_from.value,
+    } : null,
   };
 }
 
@@ -412,6 +446,11 @@ async function submitKeyForm(e) {
   if (!input.name.trim()) {
     setError("key-form-error", "Name is required.");
     $("key-form").elements.name.focus();
+    return;
+  }
+  if (input.smtp && (!input.smtp.host.trim() || !input.smtp.from.trim())) {
+    setError("key-form-error", "SMTP host and From address are required when using a dedicated SMTP server.");
+    $("key-form").elements[input.smtp.host.trim() ? "smtp_from" : "smtp_host"].focus();
     return;
   }
   const button = $("key-submit");
@@ -448,6 +487,46 @@ function showSecret(title, value, sub) {
   $("secret-copy").textContent = "Copy";
   $("secret-dialog").showModal();
 }
+
+// ---------- SMTP test ----------
+
+let testKey = null;
+
+function openTestDialog(key) {
+  testKey = key;
+  const f = $("test-form").elements;
+  $("test-sub").textContent = key.smtp
+    ? "Sends through " + key.smtp.host + ":" + key.smtp.port + " as " + key.smtp.from + "."
+    : "This key uses the default SMTP server from the service settings.";
+  setError("test-error", "");
+  $("test-ok").classList.add("hidden");
+  $("test-dialog").showModal();
+  f.to.focus();
+}
+
+$("test-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const to = $("test-form").elements.to.value.trim();
+  if (!to) {
+    setError("test-error", "Enter an email address to send the test to.");
+    return;
+  }
+  const button = $("test-submit");
+  button.disabled = true;
+  button.textContent = "Sending…";
+  setError("test-error", "");
+  $("test-ok").classList.add("hidden");
+  try {
+    const res = await api("POST", "/keys/" + testKey.id + "/smtp-test", { to });
+    $("test-ok").textContent = res.message;
+    $("test-ok").classList.remove("hidden");
+  } catch (err) {
+    setError("test-error", err.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Send test";
+  }
+});
 
 // ---------- requests ----------
 
@@ -577,6 +656,13 @@ $("new-key").addEventListener("click", () => openKeyDialog({ type: "create" }));
 $("refresh").addEventListener("click", async () => { await refresh(); toast("Data refreshed", "info"); });
 $("key-form").addEventListener("submit", submitKeyForm);
 $("key-form").elements.is_super.addEventListener("change", syncSuper);
+$("key-form").elements.smtp_enabled.addEventListener("change", () => {
+  syncSMTP();
+  if ($("key-form").elements.smtp_enabled.checked) $("key-form").elements.smtp_host.focus();
+});
+document.querySelectorAll("[data-port]").forEach((b) => b.addEventListener("click", () => {
+  $("key-form").elements.smtp_port.value = b.dataset.port;
+}));
 document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
   const [h, d, w, m] = b.dataset.preset.split(",");
   const f = $("key-form").elements;

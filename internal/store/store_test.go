@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -294,5 +295,62 @@ func TestKeyRequestApproveAndReject(t *testing.T) {
 	}
 	if statuses[req.ID] != RequestApproved || statuses[req2.ID] != RequestRejected {
 		t.Fatalf("unexpected statuses: %v", statuses)
+	}
+}
+
+func TestKeySMTPSettings(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, _, err := s.CreateKey(ctx, KeyInput{Name: "bad", SMTP: &SMTPInput{Host: "smtp.example.com", From: "not-an-email"}}, ""); err == nil {
+		t.Fatal("expected invalid From to be rejected")
+	}
+	if _, _, err := s.CreateKey(ctx, KeyInput{Name: "bad", SMTP: &SMTPInput{Host: "smtp.example.com", Port: "99999", From: "a@b.com"}}, ""); err == nil {
+		t.Fatal("expected invalid port to be rejected")
+	}
+
+	key, _, err := s.CreateKey(ctx, KeyInput{Name: "smtp", SMTP: &SMTPInput{
+		Host: " smtp.example.com ", Username: "user@example.com", Password: "s3cret", From: "Acme <no-reply@example.com>",
+	}}, "")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	t.Cleanup(func() { s.DeleteKey(ctx, key.ID) })
+	if key.SMTP == nil || key.SMTP.Host != "smtp.example.com" || key.SMTP.Port != "587" || !key.SMTP.HasPassword {
+		t.Fatalf("unexpected SMTP settings: %+v", key.SMTP)
+	}
+	if b, _ := json.Marshal(key); strings.Contains(string(b), "s3cret") {
+		t.Fatal("SMTP password leaked into JSON")
+	}
+
+	cfg, err := s.SMTPConfig(key)
+	if err != nil || cfg.Password != "s3cret" || cfg.From != "Acme <no-reply@example.com>" {
+		t.Fatalf("SMTPConfig: %+v, %v", cfg, err)
+	}
+
+	// Empty password on update keeps the stored one.
+	key, err = s.UpdateKey(ctx, key.ID, KeyInput{Name: "smtp", SMTP: &SMTPInput{
+		Host: "smtp.example.com", Port: "465", Username: "user@example.com", From: "no-reply@example.com",
+	}})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if cfg, _ := s.SMTPConfig(key); cfg.Password != "s3cret" || cfg.Port != "465" {
+		t.Fatalf("password not kept: %+v", cfg)
+	}
+
+	// Removing the username clears the password.
+	key, _ = s.UpdateKey(ctx, key.ID, KeyInput{Name: "smtp", SMTP: &SMTPInput{Host: "relay.local", From: "no-reply@example.com"}})
+	if key.SMTP.HasPassword {
+		t.Fatal("password should be cleared without a username")
+	}
+
+	// No SMTP input means the key falls back to the default server.
+	key, _ = s.UpdateKey(ctx, key.ID, KeyInput{Name: "smtp"})
+	if key.SMTP != nil {
+		t.Fatalf("SMTP should be cleared: %+v", key.SMTP)
+	}
+	if cfg, err := s.SMTPConfig(key); cfg != nil || err != nil {
+		t.Fatalf("expected default SMTP, got %+v, %v", cfg, err)
 	}
 }

@@ -5,6 +5,18 @@ type MailMessage struct {
 	Target  string `json:"target"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
+	// SMTP overrides the default SMTP server for this message. It is set from the
+	// sending API key and never read from or written to JSON.
+	SMTP *SMTPConfig `json:"-"`
+}
+
+// SMTPConfig is a complete, decrypted SMTP server configuration.
+type SMTPConfig struct {
+	Host     string
+	Port     string
+	Username string
+	Password string
+	From     string
 }
 
 type SendRequest struct {
@@ -21,8 +33,8 @@ type BulkSendRequest struct {
 }
 
 type TemplateSendRequest struct {
-	Recipients []string          `json:"recipients"`
-	Subject    string            `json:"subject"`
-	Body       string            `json:"body"`
+	Recipients []string            `json:"recipients"`
+	Subject    string              `json:"subject"`
+	Body       string              `json:"body"`
 	Meta       map[string][]string `json:"meta"`
 }

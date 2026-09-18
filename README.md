@@ -14,6 +14,7 @@ A queue-backed Go mail service that accepts outgoing mail jobs over HTTP and pro
 - Admin web UI for a super user to create and manage API keys and review access requests
 - Per-key allowed IPs and hourly / daily / weekly / monthly mail limits
 - Super API keys with no limits and no IP restriction
+- A dedicated SMTP server and From address per API key, with a default from the environment
 - PostgreSQL storage for API keys and a log of every authenticated request
 
 ## Quick start (Docker Compose)
@@ -121,6 +122,21 @@ A `429` response also includes the window, limit, used and requested counts, and
   "retry_at": "2026-09-18T17:23:08Z"
 }
 ```
+
+### SMTP server per API key
+
+Every API key can send through its own SMTP server. In the admin UI, open a key (or approve a request), turn on **Use a dedicated SMTP server** and enter host, port, username, password and From address. Use **Send test email** (the envelope icon in the keys table) to check the settings. It sends a real message and shows the server's reply.
+
+| Key setting | Mail from that key is sent through |
+| --- | --- |
+| Dedicated SMTP server | That server, with its From address |
+| None | The default server from `SMTP_*` in `.env` |
+| None, and no default | Nowhere: the mail is only logged (simulation mode) |
+
+- The SMTP password is encrypted with AES-256-GCM (using `API_KEY_ENCRYPTION_KEY`) and never returned by the admin API. When editing, leave the password blank to keep it; clearing the username removes it.
+- Port `465` uses implicit TLS. Other ports (usually `587`) upgrade with STARTTLS when the server offers it. Credentials are never sent over an unencrypted connection.
+- If a key's SMTP settings can't be decrypted, requests fail with `500` before anything is counted against the key's limits.
+- Header values are cleaned so a subject containing line breaks cannot inject extra headers.
 
 ### Super API key
 
@@ -317,7 +333,7 @@ See [.env.example](.env.example) for a complete template.
 
 ## SMTP configuration
 
-Set these environment variables when you want the service to send real emails through SMTP:
+These variables set the **default** SMTP server, used by API keys that don't have their own (see [SMTP server per API key](#smtp-server-per-api-key)):
 
 ```bash
 SMTP_HOST=smtp.example.com

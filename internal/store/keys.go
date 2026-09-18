@@ -36,6 +36,11 @@ type APIKey struct {
 	LastUsedAt  *time.Time `json:"last_used_at"`
 	LastUsedIP  *string    `json:"last_used_ip"`
 	Usage       *Usage     `json:"usage,omitempty"`
+	// SMTP is the key's own SMTP server, or nil when it uses the default.
+	SMTP *SMTPSettings `json:"smtp"`
+
+	keyHash      []byte
+	smtpPassword []byte
 }
 
 // Limits are maximum mails per rolling window. Zero means unlimited.
@@ -56,12 +61,13 @@ type Usage struct {
 
 // KeyInput holds the editable fields of an API key.
 type KeyInput struct {
-	Name       string   `json:"name"`
-	Address    string   `json:"address"`
-	AllowedIPs []string `json:"allowed_ips"`
-	IsSuper    bool     `json:"is_super"`
-	Limits     Limits   `json:"limits"`
-	Active     *bool    `json:"active"`
+	Name       string     `json:"name"`
+	Address    string     `json:"address"`
+	AllowedIPs []string   `json:"allowed_ips"`
+	IsSuper    bool       `json:"is_super"`
+	Limits     Limits     `json:"limits"`
+	Active     *bool      `json:"active"`
+	SMTP       *SMTPInput `json:"smtp"`
 }
 
 // ValidationError reports invalid key input.
@@ -85,6 +91,9 @@ func (in *KeyInput) Normalize() error {
 	}
 	if in.Limits.Hour < 0 || in.Limits.Day < 0 || in.Limits.Week < 0 || in.Limits.Month < 0 {
 		return invalid("limits cannot be negative")
+	}
+	if err := in.SMTP.normalize(); err != nil {
+		return err
 	}
 
 	ips := []string{}
@@ -161,20 +170,24 @@ func displayPrefix(raw string) string {
 
 const keyColumns = `id, name, address, key_prefix, allowed_ips, is_super,
 	limit_hour, limit_day, limit_week, limit_month, active, created_ip,
-	created_at, last_used_at, last_used_ip, key_encrypted IS NOT NULL`
+	created_at, last_used_at, last_used_ip, key_encrypted IS NOT NULL,
+	key_hash, smtp_host, smtp_port, smtp_username, smtp_from, smtp_password_encrypted`
 
 type scanner interface {
 	Scan(dest ...any) error
 }
 
-func scanKey(row scanner) (*APIKey, error) {
+// scanKey reads keyColumns, followed by any extra destinations.
+func scanKey(row scanner, extra ...any) (*APIKey, error) {
 	var k APIKey
 	var lastUsed sql.NullTime
 	var lastIP sql.NullString
-	err := row.Scan(&k.ID, &k.Name, &k.Address, &k.KeyPrefix, pq.Array(&k.AllowedIPs), &k.IsSuper,
+	var smtp SMTPSettings
+	dest := []any{&k.ID, &k.Name, &k.Address, &k.KeyPrefix, pq.Array(&k.AllowedIPs), &k.IsSuper,
 		&k.Limits.Hour, &k.Limits.Day, &k.Limits.Week, &k.Limits.Month, &k.Active, &k.CreatedIP,
-		&k.CreatedAt, &lastUsed, &lastIP, &k.Recoverable)
-	if err != nil {
+		&k.CreatedAt, &lastUsed, &lastIP, &k.Recoverable,
+		&k.keyHash, &smtp.Host, &smtp.Port, &smtp.Username, &smtp.From, &k.smtpPassword}
+	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
 	if lastUsed.Valid {
@@ -182,6 +195,10 @@ func scanKey(row scanner) (*APIKey, error) {
 	}
 	if lastIP.Valid {
 		k.LastUsedIP = &lastIP.String
+	}
+	if smtp.Host != "" {
+		smtp.HasPassword = len(k.smtpPassword) > 0
+		k.SMTP = &smtp
 	}
 	return &k, nil
 }
@@ -212,14 +229,24 @@ func (s *Store) createKey(ctx context.Context, q rowQueryer, in KeyInput, create
 	if in.Active != nil {
 		active = *in.Active
 	}
+	smtp := SMTPInput{}
+	if in.SMTP.enabled() {
+		smtp = *in.SMTP
+	}
+	smtpPassword, err := s.sealSMTPPassword(smtp.Password, hash)
+	if err != nil {
+		return nil, "", err
+	}
 
 	row := q.QueryRowContext(ctx, `
 		INSERT INTO api_keys (name, address, key_prefix, key_hash, allowed_ips, is_super,
-			limit_hour, limit_day, limit_week, limit_month, active, created_ip, key_encrypted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			limit_hour, limit_day, limit_week, limit_month, active, created_ip, key_encrypted,
+			smtp_host, smtp_port, smtp_username, smtp_from, smtp_password_encrypted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING `+keyColumns,
 		in.Name, in.Address, displayPrefix(raw), hash, pq.Array(in.AllowedIPs), in.IsSuper,
-		in.Limits.Hour, in.Limits.Day, in.Limits.Week, in.Limits.Month, active, createdIP, encrypted)
+		in.Limits.Hour, in.Limits.Day, in.Limits.Week, in.Limits.Month, active, createdIP, encrypted,
+		smtp.Host, smtp.Port, smtp.Username, smtp.From, smtpPassword)
 	key, err := scanKey(row)
 	if err != nil {
 		return nil, "", err
@@ -308,20 +335,9 @@ func (s *Store) ListKeys(ctx context.Context) ([]*APIKey, error) {
 	keys := []*APIKey{}
 	for rows.Next() {
 		var u Usage
-		var lastUsed sql.NullTime
-		var lastIP sql.NullString
-		k := &APIKey{}
-		err := rows.Scan(&k.ID, &k.Name, &k.Address, &k.KeyPrefix, pq.Array(&k.AllowedIPs), &k.IsSuper,
-			&k.Limits.Hour, &k.Limits.Day, &k.Limits.Week, &k.Limits.Month, &k.Active, &k.CreatedIP,
-			&k.CreatedAt, &lastUsed, &lastIP, &k.Recoverable, &u.Hour, &u.Day, &u.Week, &u.Month)
+		k, err := scanKey(rows, &u.Hour, &u.Day, &u.Week, &u.Month)
 		if err != nil {
 			return nil, err
-		}
-		if lastUsed.Valid {
-			k.LastUsedAt = &lastUsed.Time
-		}
-		if lastIP.Valid {
-			k.LastUsedIP = &lastIP.String
 		}
 		k.Usage = &u
 		keys = append(keys, k)
@@ -341,18 +357,68 @@ func (s *Store) UpdateKey(ctx context.Context, id int64, in KeyInput) (*APIKey, 
 	if err := in.Normalize(); err != nil {
 		return nil, err
 	}
-	key, err := scanKey(s.db.QueryRowContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var hash, oldPassword []byte
+	err = tx.QueryRowContext(ctx, `SELECT key_hash, smtp_password_encrypted FROM api_keys WHERE id = $1 FOR UPDATE`, id).
+		Scan(&hash, &oldPassword)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// An empty password keeps the stored one, unless SMTP or its username was removed.
+	smtp := SMTPInput{}
+	var password []byte
+	if in.SMTP.enabled() {
+		smtp = *in.SMTP
+		switch {
+		case smtp.Password != "":
+			if password, err = s.sealSMTPPassword(smtp.Password, hash); err != nil {
+				return nil, err
+			}
+		case smtp.Username != "":
+			password = oldPassword
+		}
+	}
+
+	key, err := scanKey(tx.QueryRowContext(ctx, `
 		UPDATE api_keys SET name = $2, address = $3, allowed_ips = $4, is_super = $5,
 			limit_hour = $6, limit_day = $7, limit_week = $8, limit_month = $9,
-			active = COALESCE($10, active)
+			active = COALESCE($10, active),
+			smtp_host = $11, smtp_port = $12, smtp_username = $13, smtp_from = $14, smtp_password_encrypted = $15
 		WHERE id = $1
 		RETURNING `+keyColumns,
 		id, in.Name, in.Address, pq.Array(in.AllowedIPs), in.IsSuper,
-		in.Limits.Hour, in.Limits.Day, in.Limits.Week, in.Limits.Month, in.Active))
+		in.Limits.Hour, in.Limits.Day, in.Limits.Week, in.Limits.Month, in.Active,
+		smtp.Host, smtp.Port, smtp.Username, smtp.From, password))
+	if err != nil {
+		return nil, err
+	}
+	return key, tx.Commit()
+}
+
+// GetKey returns one key by id.
+func (s *Store) GetKey(ctx context.Context, id int64) (*APIKey, error) {
+	key, err := scanKey(s.db.QueryRowContext(ctx, `SELECT `+keyColumns+` FROM api_keys WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	return key, err
+}
+
+// sealSMTPPassword encrypts a non-empty password; it returns nil for an empty one.
+func (s *Store) sealSMTPPassword(password string, keyHash []byte) ([]byte, error) {
+	if password == "" {
+		return nil, nil
+	}
+	return s.cipher.Seal(password, smtpAAD(keyHash))
 }
 
 func (s *Store) SetKeyActive(ctx context.Context, id int64, active bool) error {

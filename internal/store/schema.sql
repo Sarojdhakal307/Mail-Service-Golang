@@ -61,3 +61,10 @@ CREATE INDEX IF NOT EXISTS key_requests_created_idx ON key_requests (created_at 
 
 ALTER TABLE key_requests ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
 ALTER TABLE key_requests ADD COLUMN IF NOT EXISTS message TEXT NOT NULL DEFAULT '';
+
+-- Optional per-key SMTP server. An empty smtp_host means the key uses the default SMTP settings.
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_host TEXT NOT NULL DEFAULT '';
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_port TEXT NOT NULL DEFAULT '';
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_username TEXT NOT NULL DEFAULT '';
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_from TEXT NOT NULL DEFAULT '';
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_password_encrypted BYTEA;

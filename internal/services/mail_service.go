@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/smtp"
-	"os"
 	"strings"
 	"sync"
 
@@ -14,48 +12,6 @@ import (
 
 type MailSender interface {
 	Send(ctx context.Context, msg types.MailMessage) error
-}
-
-type SMTPMailer struct {
-	host     string
-	port     string
-	username string
-	password string
-	from     string
-}
-
-// SMTPConfigured reports whether real SMTP delivery is configured.
-func SMTPConfigured() bool {
-	return os.Getenv("SMTP_HOST") != "" && os.Getenv("SMTP_PORT") != "" && os.Getenv("SMTP_FROM") != ""
-}
-
-func NewSMTPMailer() MailSender {
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
-	username := os.Getenv("SMTP_USERNAME")
-	password := os.Getenv("SMTP_PASSWORD")
-	from := os.Getenv("SMTP_FROM")
-
-	if !SMTPConfigured() {
-		return &NoopMailer{}
-	}
-
-	return &SMTPMailer{host: host, port: port, username: username, password: password, from: from}
-}
-
-func (m *SMTPMailer) Send(ctx context.Context, msg types.MailMessage) error {
-	addr := fmt.Sprintf("%s:%s", m.host, m.port)
-	auth := smtp.PlainAuth("", m.username, m.password, m.host)
-	recipient := []string{msg.To}
-	if msg.To == "" && msg.Target != "" {
-		recipient = []string{msg.Target}
-	}
-	if len(recipient) == 0 || recipient[0] == "" {
-		return fmt.Errorf("mail recipient is required")
-	}
-
-	body := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s\r\n", recipient[0], msg.Subject, msg.Body))
-	return smtp.SendMail(addr, auth, m.from, recipient, body)
 }
 
 type NoopMailer struct{}
@@ -99,13 +55,22 @@ func (s *MailService) Start() {
 						return
 					}
 					log.Printf("worker %d picked job for recipient %s from queue", workerID, msg.To)
-					if err := s.sender.Send(context.Background(), msg); err != nil {
+					if err := s.senderFor(msg).Send(context.Background(), msg); err != nil {
 						log.Printf("worker %d failed to send mail: %v", workerID, err)
 					}
 				}
 			}
 		}(i)
 	}
+}
+
+// senderFor uses the SMTP server attached to the message (from its API key), falling back
+// to the default sender.
+func (s *MailService) senderFor(msg types.MailMessage) MailSender {
+	if msg.SMTP != nil {
+		return NewSMTPMailerFromConfig(*msg.SMTP)
+	}
+	return s.sender
 }
 
 func (s *MailService) Enqueue(msg types.MailMessage) error {

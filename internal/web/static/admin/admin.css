@@ -45,6 +45,8 @@
 .topbar p { font-size: 13px; }
 .menu-btn { display: none; }
 .content { padding: 28px 32px 48px; display: grid; gap: 20px; }
+/* Let wide tables scroll inside their card instead of stretching the page. */
+.content > * { min-width: 0; }
 
 /* Stats */
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -117,6 +119,19 @@ td.right, th.right { text-align: right; }
   background: var(--primary-soft); border: 1px solid var(--primary-line); }
 .secret-icon svg { width: 20px; height: 20px; }
 
+/* SMTP settings */
+.smtp-box { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+.smtp-fields { display: grid; gap: 14px; padding: 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elev); }
+.smtp-host-row { grid-template-columns: minmax(0, 1fr) 120px; }
+.smtp-cell { display: grid; gap: 2px; min-width: 150px; max-width: 220px; }
+.smtp-cell .mono { font-size: 12.5px; color: var(--text); word-break: break-all; }
+.smtp-cell .sub { word-break: break-word; }
+.form-ok { padding: 10px 12px; border-radius: 10px; background: var(--success-soft); border: 1px solid rgba(52, 211, 153, .3); color: #a7f3d0; font-size: 13px; }
+
+/* Tall dialogs scroll inside instead of overflowing the screen. */
+dialog.modal > form { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+dialog.modal .modal-body { overflow-y: auto; }
+
 .scrim { position: fixed; inset: 0; background: rgba(6, 5, 12, .6); z-index: 25; }
 
 @media (max-width: 1100px) {
@@ -133,6 +148,7 @@ td.right, th.right { text-align: right; }
   .topbar p { display: none; }
 }
 @media (max-width: 560px) {
+  .smtp-host-row { grid-template-columns: 1fr; }
   .stats { grid-template-columns: 1fr 1fr; gap: 10px; }
   .stat-value { font-size: 22px; }
   #new-key { padding: 7px 10px; }

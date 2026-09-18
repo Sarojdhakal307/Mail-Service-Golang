@@ -59,6 +59,8 @@ func main() {
 		Password:     os.Getenv("SUPERUSER_PASSWORD"),
 		SecureCookie: envBool("COOKIE_SECURE"),
 		TrustProxy:   trustProxy,
+		DefaultSMTP:  services.DefaultSMTPConfig(),
+		SendTest:     services.SendTest,
 	})
 	if err != nil {
 		log.Fatalf("admin configuration error: %v", err)

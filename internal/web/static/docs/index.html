@@ -328,7 +328,7 @@ Retry-After: 1834</pre>
           <tbody>
             <tr><td><code>status</code></td><td><code>operational</code> or <code>degraded</code> (database unreachable).</td></tr>
             <tr><td><code>database</code></td><td><code>ok</code> or <code>unavailable</code>.</td></tr>
-            <tr><td><code>delivery</code></td><td><code>smtp</code> for real delivery, <code>simulation</code> when mails are only logged.</td></tr>
+            <tr><td><code>delivery</code></td><td>The <strong>default</strong> server: <code>smtp</code> when one is configured, <code>simulation</code> when mails without a key-specific server are only logged.</td></tr>
             <tr><td><code>workers</code></td><td>Number of delivery workers.</td></tr>
           </tbody>
         </table>
@@ -347,6 +347,7 @@ Retry-After: 1834</pre>
             <tr><td><span class="badge badge-danger plain">403</span></td><td><code>IP address … is not allowed for this API key</code></td><td>Call from an allowed IP, or ask for your IP to be added.</td></tr>
             <tr><td><span class="badge badge-warning plain">429</span></td><td><code>… limit exceeded: …</code></td><td>Wait for <code>Retry-After</code>, or split the request if <code>retry_at</code> is null.</td></tr>
             <tr><td><span class="badge badge-danger plain">500</span></td><td>Queue error (plain text)</td><td>Retry later.</td></tr>
+            <tr><td><span class="badge badge-danger plain">500</span></td><td><code>the SMTP settings for this API key could not be loaded; …</code></td><td>Contact an administrator. Nothing was counted against your limits.</td></tr>
             <tr><td><span class="badge badge-danger plain">503</span></td><td><code>authentication temporarily unavailable</code> or <code>could not verify usage limits, try again</code></td><td>The database is unreachable. Retry with backoff.</td></tr>
           </tbody>
         </table>
@@ -359,8 +360,9 @@ Retry-After: 1834</pre>
         <h2>Delivery behaviour</h2>
         <ul class="doc-list">
           <li><strong><code>202</code> means queued, not delivered.</strong> Mails are delivered by background workers shortly afterwards.</li>
+          <li><strong>Each API key can have its own SMTP server.</strong> Mail sent with your key goes out through the server and From address an administrator assigned to it. Keys without one use the service's default server.</li>
           <li>The queue lives in memory. Mails still in the queue are lost if the service restarts, so resend anything critical if you see an outage on the <a href="/#status">status panel</a>.</li>
-          <li>Bodies are sent as plain text. HTML is not rendered.</li>
+          <li>Bodies are sent as plain UTF-8 text. HTML is not rendered. Line breaks in <code>subject</code> are replaced with spaces.</li>
           <li>Delivery failures (for example, a rejected address) are logged on the server. They are not reported back to the caller.</li>
           <li>When <code>delivery</code> is <code>simulation</code>, mails are only logged. Use this for testing.</li>
         </ul>

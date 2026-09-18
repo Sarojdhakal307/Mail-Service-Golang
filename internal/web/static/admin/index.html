@@ -121,7 +121,7 @@
           <div class="table-wrap">
             <table class="table">
               <thead>
-                <tr><th>Key</th><th>Allowed IPs</th><th>Usage</th><th>Status</th><th>Last used</th><th class="right">Actions</th></tr>
+                <tr><th>Key</th><th>Allowed IPs</th><th>Usage</th><th>SMTP</th><th>Status</th><th>Last used</th><th class="right">Actions</th></tr>
               </thead>
               <tbody id="keys-body"></tbody>
             </table>
@@ -214,6 +214,36 @@
           <input name="is_super" type="checkbox">
           <span><strong>Super key</strong>No limits and any IP allowed. Use only for trusted internal systems.</span>
         </label>
+        <fieldset class="smtp-box">
+          <label class="checkbox">
+            <input name="smtp_enabled" type="checkbox">
+            <span><strong>Use a dedicated SMTP server</strong>Mail sent with this key goes out through this server and From address. Leave off to use the default server from the service settings.</span>
+          </label>
+          <div class="smtp-fields hidden" id="smtp-fields">
+            <div class="grid-2 smtp-host-row">
+              <label class="field"><span>SMTP host <span class="req">*</span></span>
+                <input class="input mono" name="smtp_host" maxlength="253" placeholder="smtp.gmail.com" autocomplete="off"></label>
+              <label class="field"><span>Port <span class="req">*</span></span>
+                <input class="input" name="smtp_port" inputmode="numeric" maxlength="5" value="587" autocomplete="off"></label>
+            </div>
+            <div class="presets row">
+              <span class="muted small">Port:</span>
+              <button type="button" class="chip" data-port="587">587 · STARTTLS</button>
+              <button type="button" class="chip" data-port="465">465 · SSL/TLS</button>
+              <button type="button" class="chip" data-port="25">25 · Relay</button>
+            </div>
+            <div class="grid-2">
+              <label class="field"><span>Username</span>
+                <input class="input" name="smtp_username" maxlength="320" placeholder="Usually the full email address" autocomplete="off"></label>
+              <label class="field"><span>Password</span>
+                <input class="input" name="smtp_password" type="password" maxlength="1024" placeholder="App password" autocomplete="new-password">
+                <span class="hint" id="smtp-password-hint">Stored encrypted. Never shown again.</span></label>
+            </div>
+            <label class="field"><span>From address <span class="req">*</span></span>
+              <input class="input" name="smtp_from" maxlength="320" placeholder="Acme &lt;no-reply@acme.com&gt;" autocomplete="off">
+              <span class="hint">The sender recipients see. Most providers require it to match the account or a verified domain.</span></label>
+          </div>
+        </fieldset>
         <div id="key-form-error" class="form-error hidden" role="alert"></div>
       </div>
       <div class="modal-foot">
@@ -239,6 +269,28 @@
     <div class="modal-foot">
       <button class="btn btn-secondary" type="button" data-close>Done</button>
     </div>
+  </dialog>
+
+  <!-- Send test email -->
+  <dialog class="modal modal-sm" id="test-dialog" aria-labelledby="test-title">
+    <form id="test-form" method="dialog" novalidate>
+      <div class="modal-head">
+        <div>
+          <h2 id="test-title">Send test email</h2>
+          <p id="test-sub"></p>
+        </div>
+      </div>
+      <div class="modal-body">
+        <label class="field"><span>Send to</span>
+          <input class="input" name="to" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+        <div id="test-error" class="form-error hidden" role="alert"></div>
+        <div id="test-ok" class="form-ok hidden" role="status"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" type="button" data-close>Close</button>
+        <button class="btn btn-primary" type="submit" id="test-submit">Send test</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Confirm -->
