@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Queue-backed transactional email over a simple, secure HTTP API.">
+  <meta name="theme-color" content="#0b0a12">
+  <title>Mail Service · Transactional email API</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/theme.css">
+  <link rel="stylesheet" href="/assets/site.css">
+  <script src="/assets/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-nav">
+    <div class="container nav-inner">
+      <a class="brand" href="/" aria-label="Mail Service home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg>
+        </span>
+        Mail Service
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#status">Status</a>
+        <a href="/docs/">Docs</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="btn btn-ghost btn-sm" href="/admin/">Admin</a>
+        <a class="btn btn-primary btn-sm" href="#request">Request API key</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <a class="pill" href="#status" id="hero-status">
+            <span class="dot" id="hero-dot"></span><span id="hero-status-text">Checking system status…</span>
+          </a>
+          <h1>Transactional email,<br><span class="gradient-text">one HTTP call away.</span></h1>
+          <p class="lead">Send single, bulk and templated emails through a queue-backed API. Every key has its own limits and IP rules, and every request is audited.</p>
+          <div class="row hero-actions">
+            <a class="btn btn-primary btn-lg" href="#request">
+              Request an API key
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+            <a class="btn btn-secondary btn-lg" href="/docs/">Read the docs</a>
+          </div>
+          <ul class="hero-points">
+            <li>Asynchronous delivery</li>
+            <li>Per-key rate limits</li>
+            <li>IP allow lists</li>
+          </ul>
+        </div>
+
+        <div class="codeblock hero-code" aria-label="Example request">
+          <div class="codeblock-head">
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>send-mail.sh</span>
+          </div>
+<pre><span class="tok-k">curl</span> -X POST <span class="tok-s base-url">https://mail.example.com</span><span class="tok-s">/send</span> \
+  -H <span class="tok-s">"Content-Type: application/json"</span> \
+  -H <span class="tok-s">"X-API-Key: </span><span class="tok-h">$API_KEY</span><span class="tok-s">"</span> \
+  -d <span class="tok-s">'{
+    "to": "ada@example.com",
+    "subject": "Welcome aboard",
+    "body": "Your account is ready."
+  }'</span>
+
+<span class="tok-c"># HTTP/1.1 202 Accepted</span>
+<span class="tok-c"># mail queued</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Features</span>
+          <h2>Everything you need to send mail from your apps</h2>
+          <p class="text-2">A small, focused service that does one job well, with the controls operators expect.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+            <h3>Queue-backed delivery</h3>
+            <p>Requests return immediately with <code>202 Accepted</code>. Background workers deliver each mail over SMTP.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+            <h3>Bulk &amp; templates</h3>
+            <p>Send to many recipients at once and personalise bodies with <code>{{placeholders}}</code>.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M6 20V10M18 20V4"/></svg></div>
+            <h3>Per-key rate limits</h3>
+            <p>Hourly, daily, weekly and monthly limits, with clear errors that tell you exactly when to retry.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+            <h3>IP allow lists</h3>
+            <p>Restrict each key to specific IP addresses or CIDR ranges, so a leaked key is useless elsewhere.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+            <h3>Keys kept safe</h3>
+            <p>Keys are checked against SHA-256 hashes and stored encrypted with AES-256-GCM.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>
+            <h3>Full audit trail</h3>
+            <p>Every authenticated request is logged with its key, IP, endpoint, mail count and outcome.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section section-alt">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">How it works</span>
+          <h2>From request to first email in three steps</h2>
+        </div>
+        <ol class="steps">
+          <li class="step">
+            <span class="step-num">1</span>
+            <h3>Request access</h3>
+            <p>Tell us who you are and what you will send using the form below.</p>
+          </li>
+          <li class="step">
+            <span class="step-num">2</span>
+            <h3>Receive your key</h3>
+            <p>An administrator reviews the request and issues a key with limits that fit your volume.</p>
+          </li>
+          <li class="step">
+            <span class="step-num">3</span>
+            <h3>Start sending</h3>
+            <p>Add the key to the <code>X-API-Key</code> header and call the API. The <a href="/docs/">docs</a> have examples in four languages.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="status" class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">System status</span>
+          <h2>Live service information</h2>
+          <p class="text-2">Read from <code>/api/status</code> and refreshed every 30 seconds.</p>
+        </div>
+        <div class="card status-card">
+          <div class="status-top">
+            <div class="row">
+              <span class="dot" id="status-dot"></span>
+              <strong id="status-title">Checking…</strong>
+            </div>
+            <span class="muted" id="status-updated"></span>
+          </div>
+          <dl class="status-grid">
+            <div><dt>API</dt><dd id="st-api">—</dd></div>
+            <div><dt>Database</dt><dd id="st-db">—</dd></div>
+            <div><dt>Delivery mode</dt><dd id="st-delivery">—</dd></div>
+            <div><dt>Workers</dt><dd id="st-workers">—</dd></div>
+            <div><dt>Uptime</dt><dd id="st-uptime">—</dd></div>
+            <div><dt>Version</dt><dd id="st-version">—</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section id="request" class="section section-alt">
+      <div class="container request-grid">
+        <div class="request-copy">
+          <span class="eyebrow">Get access</span>
+          <h2>Request an API key</h2>
+          <p class="text-2">Keys are issued manually so every integration gets the right limits. Tell us a little about your project and we will get back to you by email.</p>
+          <ul class="checklist">
+            <li>Usually reviewed within one business day</li>
+            <li>Limits sized to your expected volume</li>
+            <li>Optional IP restrictions for extra safety</li>
+          </ul>
+          <p class="muted small">Already have a key? Jump to the <a href="/docs/#quickstart">quick start</a>.</p>
+        </div>
+
+        <div class="card card-pad">
+          <form id="request-form" class="stack" novalidate>
+            <div class="grid-2">
+              <label class="field"><span>Full name <span class="req">*</span></span>
+                <input class="input" name="name" autocomplete="name" maxlength="120" required></label>
+              <label class="field"><span>Work email <span class="req">*</span></span>
+                <input class="input" name="email" type="email" autocomplete="email" maxlength="254" required></label>
+            </div>
+            <div class="grid-2">
+              <label class="field"><span>Phone number <span class="req">*</span></span>
+                <input class="input" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required placeholder="+977 98XXXXXXXX"></label>
+              <label class="field"><span>Organization</span>
+                <input class="input" name="organization" autocomplete="organization" maxlength="160"></label>
+            </div>
+            <div class="grid-2">
+              <label class="field"><span>Address</span>
+                <input class="input" name="address" autocomplete="street-address" maxlength="300"></label>
+              <label class="field"><span>Expected monthly volume</span>
+                <select class="select" name="expected_volume">
+                  <option value="">Select…</option>
+                  <option>Under 1,000</option>
+                  <option>1,000 – 10,000</option>
+                  <option>10,000 – 100,000</option>
+                  <option>Over 100,000</option>
+                </select></label>
+            </div>
+            <label class="field"><span>What will you send? <span class="req">*</span></span>
+              <textarea class="textarea" name="use_case" maxlength="2000" required placeholder="e.g. Password resets and order receipts for our online store"></textarea>
+              <span class="hint">At least 20 characters.</span></label>
+            <label class="field"><span>Server IPs you will call from</span>
+              <input class="input" name="caller_ips" maxlength="500" placeholder="203.0.113.5, 10.0.0.0/8">
+              <span class="hint">Optional. We can lock your key to these addresses.</span></label>
+            <label class="field"><span>Message or questions</span>
+              <textarea class="textarea" name="message" maxlength="5000" placeholder="Anything else we should know: special limits, integration questions, timelines…"></textarea>
+              <span class="hint">Optional. <span id="message-count">0</span> / 5000 characters.</span></label>
+
+            <div class="hp" aria-hidden="true">
+              <label>Website <input name="website" tabindex="-1" autocomplete="off"></label>
+            </div>
+
+            <div id="request-error" class="form-error hidden" role="alert"></div>
+            <button class="btn btn-primary btn-lg" type="submit" id="request-submit">Send request</button>
+            <p class="muted small">We only use these details to review your request and contact you about it.</p>
+          </form>
+
+          <div id="request-done" class="done hidden" role="status">
+            <div class="done-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+            <h3>Request received</h3>
+            <p class="text-2" id="request-done-text"></p>
+            <a class="btn btn-secondary" href="/docs/">Explore the docs while you wait</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg></span>Mail Service</span>
+      <nav class="row footer-links" aria-label="Footer">
+        <a href="/docs/">Documentation</a>
+        <a href="#status">Status</a>
+        <a href="#request">Request access</a>
+        <a href="/admin/">Admin</a>
+      </nav>
+      <span class="muted small">by Techyatra Labs</span>
+    </div>
+  </footer>
+</body>
+</html>

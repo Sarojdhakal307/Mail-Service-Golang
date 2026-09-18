@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b0a12">
+  <title>Admin · Mail Service</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/theme.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/admin/app.js" defer></script>
+</head>
+<body>
+  <!-- Sign in -->
+  <section id="login-view" class="login hidden">
+    <div class="login-glow" aria-hidden="true"></div>
+    <form id="login-form" class="card login-card" novalidate>
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg></span>
+        Mail Service
+      </a>
+      <div>
+        <h1>Welcome back</h1>
+        <p class="muted">Sign in with the super user account to manage API keys.</p>
+      </div>
+      <label class="field"><span>Username</span>
+        <input class="input" name="username" autocomplete="username" required autofocus></label>
+      <label class="field"><span>Password</span>
+        <input class="input" name="password" type="password" autocomplete="current-password" required></label>
+      <div id="login-error" class="form-error hidden" role="alert"></div>
+      <button class="btn btn-primary btn-lg" type="submit" id="login-submit">Sign in</button>
+      <p class="muted small center"><a href="/">← Back to site</a></p>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="app-view" class="shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/admin/">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg></span>
+        <span>Mail Service<small class="block">Admin console</small></span>
+      </a>
+
+      <nav class="side-nav" aria-label="Admin">
+        <p class="side-title">Manage</p>
+        <a href="#keys" data-view="keys">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>
+          API keys <span class="count" id="nav-keys-count"></span>
+        </a>
+        <a href="#requests" data-view="requests">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          Access requests <span class="count count-alert hidden" id="nav-pending-count"></span>
+        </a>
+        <a href="#logs" data-view="logs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Request log
+        </a>
+        <p class="side-title">Resources</p>
+        <a href="/" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Public site
+        </a>
+        <a href="/docs/" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15zM20 17v5H6.5A2.5 2.5 0 0 1 4 19.5"/></svg>
+          API docs
+        </a>
+      </nav>
+
+      <div class="side-user">
+        <span class="avatar" id="avatar" aria-hidden="true">A</span>
+        <span class="side-user-name"><strong id="whoami">admin</strong><small>Super user</small></span>
+        <button class="btn btn-ghost btn-icon" id="logout" title="Sign out" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="btn btn-ghost btn-icon menu-btn" id="menu-btn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div>
+          <h1 id="page-title">API keys</h1>
+          <p class="muted" id="page-sub">Create keys, set limits and watch usage.</p>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-secondary btn-sm" id="refresh" type="button" title="Refresh data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
+          <span class="hide-sm">Refresh</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="new-key" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          New API key
+        </button>
+      </header>
+
+      <div class="content">
+        <section class="stats" aria-label="Summary">
+          <div class="stat card"><span class="stat-label">Total keys</span><strong class="stat-value" id="stat-keys">–</strong><span class="stat-sub" id="stat-keys-sub"></span></div>
+          <div class="stat card"><span class="stat-label">Active keys</span><strong class="stat-value" id="stat-active">–</strong><span class="stat-sub" id="stat-active-sub"></span></div>
+          <div class="stat card"><span class="stat-label">Pending requests</span><strong class="stat-value" id="stat-pending">–</strong><span class="stat-sub"><a href="#requests">Review requests →</a></span></div>
+          <div class="stat card"><span class="stat-label">Mails · last 24h</span><strong class="stat-value" id="stat-mails">–</strong><span class="stat-sub" id="stat-mails-sub"></span></div>
+        </section>
+
+        <!-- Keys -->
+        <section class="view card" id="view-keys" aria-labelledby="page-title">
+          <div class="card-head">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input class="input" id="key-search" type="search" placeholder="Search by name, address or key prefix" aria-label="Search keys">
+            </div>
+            <div class="segmented" role="group" aria-label="Filter keys" id="key-filter">
+              <button type="button" data-filter="all" aria-pressed="true">All</button>
+              <button type="button" data-filter="active" aria-pressed="false">Active</button>
+              <button type="button" data-filter="disabled" aria-pressed="false">Disabled</button>
+              <button type="button" data-filter="super" aria-pressed="false">Super</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Key</th><th>Allowed IPs</th><th>Usage</th><th>Status</th><th>Last used</th><th class="right">Actions</th></tr>
+              </thead>
+              <tbody id="keys-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Requests -->
+        <section class="view hidden" id="view-requests">
+          <div class="row requests-bar">
+            <div class="segmented" role="group" aria-label="Filter requests" id="request-filter">
+              <button type="button" data-filter="pending" aria-pressed="true">Pending</button>
+              <button type="button" data-filter="approved" aria-pressed="false">Approved</button>
+              <button type="button" data-filter="rejected" aria-pressed="false">Rejected</button>
+              <button type="button" data-filter="all" aria-pressed="false">All</button>
+            </div>
+          </div>
+          <div id="requests-list" class="request-list"></div>
+        </section>
+
+        <!-- Logs -->
+        <section class="view card hidden" id="view-logs">
+          <div class="card-head">
+            <label class="inline-field">Key
+              <select class="select" id="log-filter"><option value="0">All keys</option></select>
+            </label>
+            <label class="inline-field">Status
+              <select class="select" id="log-status">
+                <option value="">All statuses</option>
+                <option value="accepted">Accepted</option>
+                <option value="limit_exceeded">Limit exceeded</option>
+                <option value="ip_denied">IP denied</option>
+                <option value="key_disabled">Key disabled</option>
+              </select>
+            </label>
+            <span class="spacer"></span>
+            <span class="muted small">Latest 200 requests</span>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Time</th><th>Key</th><th>IP</th><th>Endpoint</th><th class="right">Mails</th><th>Status</th><th>Message</th></tr></thead>
+              <tbody id="logs-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="scrim" id="scrim" hidden></div>
+  </div>
+
+  <!-- Create / edit / approve key -->
+  <dialog class="modal" id="key-dialog" aria-labelledby="key-dialog-title">
+    <form id="key-form" method="dialog" novalidate>
+      <div class="modal-head">
+        <div>
+          <h2 id="key-dialog-title">New API key</h2>
+          <p id="key-dialog-sub">The key is generated for you. You can copy it at any time later.</p>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-icon" type="button" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="request-summary hidden" id="approve-summary"></div>
+        <div class="grid-2">
+          <label class="field"><span>Name <span class="req">*</span></span>
+            <input class="input" name="name" maxlength="200" required placeholder="e.g. Billing service"></label>
+          <label class="field"><span>Address</span>
+            <input class="input" name="address" maxlength="500" placeholder="Owner address or contact"></label>
+        </div>
+        <label class="field"><span>Allowed IPs</span>
+          <input class="input mono" name="allowed_ips" placeholder="*">
+          <span class="hint">Use <code>*</code> for any IP, or list IPs and CIDR ranges separated by commas, e.g. <code>203.0.113.5, 10.0.0.0/8</code>.</span></label>
+        <fieldset class="limits" id="limits-fieldset">
+          <legend>Mail limits <span class="hint">0 = unlimited</span></legend>
+          <div class="grid-4">
+            <label class="field"><span>Per hour</span><input class="input" name="limit_hour" type="number" min="0" value="0" inputmode="numeric"></label>
+            <label class="field"><span>Per day</span><input class="input" name="limit_day" type="number" min="0" value="0" inputmode="numeric"></label>
+            <label class="field"><span>Per week</span><input class="input" name="limit_week" type="number" min="0" value="0" inputmode="numeric"></label>
+            <label class="field"><span>Per month</span><input class="input" name="limit_month" type="number" min="0" value="0" inputmode="numeric"></label>
+          </div>
+          <div class="presets row">
+            <span class="muted small">Presets:</span>
+            <button type="button" class="chip" data-preset="100,1000,5000,20000">Starter</button>
+            <button type="button" class="chip" data-preset="1000,10000,50000,200000">Growth</button>
+            <button type="button" class="chip" data-preset="0,0,0,0">Unlimited</button>
+          </div>
+        </fieldset>
+        <label class="checkbox">
+          <input name="is_super" type="checkbox">
+          <span><strong>Super key</strong>No limits and any IP allowed. Use only for trusted internal systems.</span>
+        </label>
+        <div id="key-form-error" class="form-error hidden" role="alert"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="submit" id="key-submit">Create key</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Show a key -->
+  <dialog class="modal" id="secret-dialog" aria-labelledby="secret-title">
+    <div class="modal-head">
+      <div class="secret-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></div>
+      <div>
+        <h2 id="secret-title">API key</h2>
+        <p id="secret-sub">Share it securely. You can copy it again later from the keys table.</p>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="secret"><code id="secret-value"></code><button class="btn btn-primary btn-sm" id="secret-copy" type="button">Copy</button></div>
+      <p class="muted small">Send it to the client over a secure channel. Anyone with this key can send mail within its limits.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" type="button" data-close>Done</button>
+    </div>
+  </dialog>
+
+  <!-- Confirm -->
+  <dialog class="modal modal-sm" id="confirm-dialog" aria-labelledby="confirm-title">
+    <div class="modal-head">
+      <div>
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-text"></p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+      <button class="btn btn-danger-solid" type="button" id="confirm-ok">Confirm</button>
+    </div>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>

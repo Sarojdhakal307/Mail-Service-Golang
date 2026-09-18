@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Complete reference for the Mail Service HTTP API: authentication, rate limits, endpoints, errors and code examples.">
+  <meta name="theme-color" content="#0b0a12">
+  <title>API Documentation · Mail Service</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/theme.css">
+  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="/assets/docs.css">
+  <script src="/assets/docs.js" defer></script>
+</head>
+<body class="docs">
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <header class="site-nav">
+    <div class="container-wide nav-inner">
+      <button class="btn btn-ghost btn-icon docs-menu" id="docs-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="docs-sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <a class="brand" href="/" aria-label="Mail Service home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg></span>
+        Mail Service <span class="docs-tag">Docs</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/#status">Status</a>
+        <a href="/docs/" aria-current="page">API reference</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="btn btn-primary btn-sm" href="/#request">Request API key</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container-wide docs-layout">
+    <aside class="docs-sidebar" id="docs-sidebar" aria-label="Documentation">
+      <nav class="toc">
+        <p class="toc-title">Getting started</p>
+        <a href="#introduction">Introduction</a>
+        <a href="#quickstart">Quick start</a>
+        <a href="#base-url">Base URL &amp; format</a>
+        <p class="toc-title">Security</p>
+        <a href="#authentication">Authentication</a>
+        <a href="#ip-restrictions">IP restrictions</a>
+        <a href="#rate-limits">Rate limits</a>
+        <p class="toc-title">Endpoints</p>
+        <a href="#send"><span class="m m-post">POST</span>/send</a>
+        <a href="#send-bulk"><span class="m m-post">POST</span>/send/bulk</a>
+        <a href="#send-template"><span class="m m-post">POST</span>/send/template</a>
+        <a href="#health"><span class="m m-get">GET</span>/health</a>
+        <a href="#status"><span class="m m-get">GET</span>/api/status</a>
+        <p class="toc-title">Reference</p>
+        <a href="#errors">Errors</a>
+        <a href="#delivery">Delivery behaviour</a>
+        <a href="#examples">Code examples</a>
+        <a href="#best-practices">Best practices</a>
+        <a href="#postman">Postman collection</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content" id="content">
+
+      <section id="introduction" class="doc-section">
+        <span class="eyebrow">API reference</span>
+        <h1>Mail Service API</h1>
+        <p class="lead">A small HTTP API for sending transactional email. You send a JSON request, the service queues it and returns <code>202 Accepted</code> straight away, and background workers deliver the mail over SMTP.</p>
+        <div class="callouts">
+          <a class="callout-card" href="#quickstart">
+            <strong>Quick start</strong><span>Send your first email in under a minute.</span>
+          </a>
+          <a class="callout-card" href="#authentication">
+            <strong>Authentication</strong><span>How API keys, IP rules and limits work.</span>
+          </a>
+          <a class="callout-card" href="#errors">
+            <strong>Errors</strong><span>Every status code and what to do about it.</span>
+          </a>
+        </div>
+      </section>
+
+      <section id="quickstart" class="doc-section">
+        <h2>Quick start</h2>
+        <ol class="doc-steps">
+          <li><strong>Get an API key.</strong> <a href="/#request">Request one</a> from the home page. Keys look like <code>msk_</code> followed by 64 hex characters.</li>
+          <li><strong>Store it as a secret.</strong> Put it in an environment variable on your server, never in client-side code.</li>
+          <li><strong>Send a request</strong> with the key in the <code>X-API-Key</code> header:</li>
+        </ol>
+<pre data-lang="bash" data-title="Terminal">export API_KEY="msk_your_key_here"
+
+curl -X POST {{BASE}}/send \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"to": "ada@example.com", "subject": "Hello", "body": "It works!"}'</pre>
+        <p>A <code>202 Accepted</code> response with the body <code>mail queued</code> means the mail is in the delivery queue.</p>
+      </section>
+
+      <section id="base-url" class="doc-section">
+        <h2>Base URL &amp; format</h2>
+        <p>All endpoints are relative to this server:</p>
+<pre data-lang="text" data-title="Base URL">{{BASE}}</pre>
+        <ul class="doc-list">
+          <li>Send request bodies as JSON with <code>Content-Type: application/json</code>.</li>
+          <li>Request bodies are limited to <strong>1 MB</strong>.</li>
+          <li>Successful send calls answer with <strong>plain text</strong> such as <code>mail queued</code>.</li>
+          <li>Authentication and rate-limit errors answer with <strong>JSON</strong> containing an <code>error</code> field. Validation errors are plain text. See <a href="#errors">Errors</a>.</li>
+          <li>Use HTTPS in production so your API key is never sent in clear text.</li>
+        </ul>
+      </section>
+
+      <section id="authentication" class="doc-section">
+        <h2>Authentication</h2>
+        <p>Every endpoint except <code>/health</code> and <code>/api/status</code> needs a valid API key. Send it in either header; <code>X-API-Key</code> is checked first.</p>
+        <div class="tabs" data-tabs>
+          <div class="tab-list" role="tablist">
+            <button role="tab" aria-selected="true">X-API-Key</button>
+            <button role="tab" aria-selected="false">Bearer token</button>
+          </div>
+<pre data-lang="http" role="tabpanel">POST /send HTTP/1.1
+Content-Type: application/json
+X-API-Key: msk_3f9c…</pre>
+<pre data-lang="http" role="tabpanel" hidden>POST /send HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer msk_3f9c…</pre>
+        </div>
+
+        <h3>How keys are checked</h3>
+        <ol class="doc-list numbered">
+          <li>The key must exist. Unknown keys get <code>401 invalid API key</code>.</li>
+          <li>The key must be active. Keys an administrator has disabled get <code>403 API key is disabled</code>.</li>
+          <li>Your IP must be allowed by the key (see <a href="#ip-restrictions">IP restrictions</a>), otherwise <code>403</code>.</li>
+          <li>The request must fit within the key's <a href="#rate-limits">rate limits</a>, otherwise <code>429</code>.</li>
+        </ol>
+
+        <div class="note">
+          <strong>Keep keys secret.</strong> Anyone with your key can send mail as you. Never ship it in browser or mobile apps, never commit it to source control, and ask an administrator to disable it immediately if it leaks.
+        </div>
+        <div class="note note-primary">
+          <strong>Super keys</strong> are a special kind of key for trusted internal systems. They have no rate limits and work from any IP. Their requests are still logged.
+        </div>
+      </section>
+
+      <section id="ip-restrictions" class="doc-section">
+        <h2>IP restrictions</h2>
+        <p>Each key has an allow list of client addresses. It can be:</p>
+        <table class="table doc-table">
+          <thead><tr><th>Entry</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>*</code></td><td>Any IP address (the default).</td></tr>
+            <tr><td><code>203.0.113.5</code></td><td>Exactly this IPv4 or IPv6 address.</td></tr>
+            <tr><td><code>10.0.0.0/8</code></td><td>Any address in this CIDR range.</td></tr>
+          </tbody>
+        </table>
+        <p>Requests from other addresses are rejected before any limit is checked:</p>
+<pre data-lang="json" data-title="403 Forbidden">{
+  "error": "IP address 198.51.100.7 is not allowed for this API key"
+}</pre>
+        <p class="muted">Ask for IP restrictions when you request your key. They make a leaked key useless from anywhere else.</p>
+      </section>
+
+      <section id="rate-limits" class="doc-section">
+        <h2>Rate limits</h2>
+        <p>Each key can have up to four limits. They count <strong>mails, not HTTP requests</strong>: a bulk request to 20 recipients uses 20.</p>
+        <table class="table doc-table">
+          <thead><tr><th>Window</th><th>Length</th><th>Error label</th></tr></thead>
+          <tbody>
+            <tr><td>Hour</td><td>Rolling 60 minutes</td><td><code>Hourly limit exceeded</code></td></tr>
+            <tr><td>Day</td><td>Rolling 24 hours</td><td><code>Daily limit exceeded</code></td></tr>
+            <tr><td>Week</td><td>Rolling 7 days</td><td><code>Weekly limit exceeded</code></td></tr>
+            <tr><td>Month</td><td>Rolling 30 days</td><td><code>Monthly limit exceeded</code></td></tr>
+          </tbody>
+        </table>
+        <ul class="doc-list">
+          <li>Windows are <strong>rolling</strong>: usage from 61 minutes ago no longer counts towards the hourly limit.</li>
+          <li>A request that would exceed <em>any</em> limit is rejected as a whole. Nothing from it is queued or counted.</li>
+          <li>Rejected and invalid requests do not use up your limits.</li>
+          <li>Limits are enforced atomically, so parallel requests cannot go over a limit.</li>
+        </ul>
+
+        <h3>When a limit is reached</h3>
+        <p>You get <code>429 Too Many Requests</code> with a <code>Retry-After</code> header in seconds and a JSON body describing the limit:</p>
+<pre data-lang="http" data-title="429 Too Many Requests">HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 1834</pre>
+<pre data-lang="json" data-title="Response body">{
+  "error": "Hourly limit exceeded: 98 of 100 mails already used in the last hour and this request needs 5 more. Try again after 2026-09-18T17:23:08Z",
+  "window": "hour",
+  "limit": 100,
+  "used": 98,
+  "requested": 5,
+  "retry_at": "2026-09-18T17:23:08Z"
+}</pre>
+        <table class="table doc-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>error</code></td><td>string</td><td>Human-readable explanation.</td></tr>
+            <tr><td><code>window</code></td><td>string</td><td><code>hour</code>, <code>day</code>, <code>week</code> or <code>month</code>.</td></tr>
+            <tr><td><code>limit</code></td><td>integer</td><td>Maximum mails allowed in the window.</td></tr>
+            <tr><td><code>used</code></td><td>integer</td><td>Mails already sent in the window.</td></tr>
+            <tr><td><code>requested</code></td><td>integer</td><td>Mails in the rejected request.</td></tr>
+            <tr><td><code>retry_at</code></td><td>string | null</td><td>Earliest time (RFC 3339, UTC) the request will fit, or <code>null</code> if it never will.</td></tr>
+          </tbody>
+        </table>
+        <div class="note">
+          If <code>retry_at</code> is <code>null</code>, the request alone is bigger than the limit, for example 150 recipients against an hourly limit of 100. Waiting won't help; split the request into smaller batches.
+        </div>
+      </section>
+
+      <section id="send" class="doc-section endpoint">
+        <div class="endpoint-head"><span class="m m-post">POST</span><h2>/send</h2></div>
+        <p>Queue one email to a single recipient. Uses 1 mail from your limits.</p>
+        <h3>Request body</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>to</code></td><td>string</td><td>Yes*</td><td>Recipient email address.</td></tr>
+            <tr><td><code>target</code></td><td>string</td><td>Yes*</td><td>Alias for <code>to</code>, used when <code>to</code> is empty.</td></tr>
+            <tr><td><code>subject</code></td><td>string</td><td>No</td><td>Subject line.</td></tr>
+            <tr><td><code>body</code></td><td>string</td><td>Yes</td><td>Plain-text message body.</td></tr>
+          </tbody>
+        </table>
+        <p class="muted small">* Provide <code>to</code> or <code>target</code>.</p>
+<pre data-lang="json" data-title="Request">{
+  "to": "ada@example.com",
+  "subject": "Your order has shipped",
+  "body": "Hi Ada, your order #1042 is on its way."
+}</pre>
+        <h3>Responses</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Status</th><th>Body</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-success plain">202</span></td><td><code>mail queued</code></td><td>Accepted for delivery.</td></tr>
+            <tr><td><span class="badge badge-warning plain">400</span></td><td><code>invalid JSON</code></td><td>The body is not valid JSON, or is larger than 1 MB.</td></tr>
+            <tr><td><span class="badge badge-warning plain">400</span></td><td><code>recipient and body are required</code></td><td>Missing <code>to</code>/<code>target</code> or <code>body</code>.</td></tr>
+            <tr><td><span class="badge badge-neutral plain">405</span></td><td>(empty)</td><td>Method other than POST.</td></tr>
+          </tbody>
+        </table>
+        <p>Plus the <a href="#errors">authentication and limit errors</a> common to all endpoints.</p>
+      </section>
+
+      <section id="send-bulk" class="doc-section endpoint">
+        <div class="endpoint-head"><span class="m m-post">POST</span><h2>/send/bulk</h2></div>
+        <p>Queue the same email to many recipients. Each recipient is a separate email and uses 1 mail from your limits. Blank entries are ignored and not counted.</p>
+        <h3>Request body</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>recipients</code></td><td>string[]</td><td>Yes</td><td>Recipient addresses. At least one non-blank entry.</td></tr>
+            <tr><td><code>subject</code></td><td>string</td><td>No</td><td>Subject line, shared by all mails.</td></tr>
+            <tr><td><code>body</code></td><td>string</td><td>Yes</td><td>Plain-text body, shared by all mails.</td></tr>
+          </tbody>
+        </table>
+<pre data-lang="json" data-title="Request">{
+  "recipients": ["ada@example.com", "grace@example.com", "alan@example.com"],
+  "subject": "Scheduled maintenance",
+  "body": "We will be offline on Sunday from 02:00 to 03:00 UTC."
+}</pre>
+        <h3>Responses</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Status</th><th>Body</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-success plain">202</span></td><td><code>3 mails queued</code></td><td>Number of mails accepted for delivery.</td></tr>
+            <tr><td><span class="badge badge-warning plain">400</span></td><td><code>recipients and body are required</code></td><td>No recipients, or empty body.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="send-template" class="doc-section endpoint">
+        <div class="endpoint-head"><span class="m m-post">POST</span><h2>/send/template</h2></div>
+        <p>Like <a href="#send-bulk">/send/bulk</a>, but <code>{{placeholders}}</code> in the body are replaced with values from <code>meta</code> before sending.</p>
+        <h3>Request body</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>recipients</code></td><td>string[]</td><td>Yes</td><td>Recipient addresses.</td></tr>
+            <tr><td><code>subject</code></td><td>string</td><td>No</td><td>Subject line. Placeholders are <em>not</em> replaced here.</td></tr>
+            <tr><td><code>body</code></td><td>string</td><td>Yes</td><td>Body containing placeholders such as <code>{{name}}</code>.</td></tr>
+            <tr><td><code>meta</code></td><td>object</td><td>No</td><td>Map of placeholder name to an array of strings.</td></tr>
+          </tbody>
+        </table>
+<pre data-lang="json" data-title="Request">{
+  "recipients": ["ada@example.com", "grace@example.com"],
+  "subject": "Welcome to Acme",
+  "body": "Hello {{team}} member, welcome to {{company}}!",
+  "meta": {
+    "team": ["Platform"],
+    "company": ["Acme Inc."]
+  }
+}</pre>
+        <h3>How placeholders are filled</h3>
+        <ul class="doc-list">
+          <li>Every <code>{{key}}</code> is replaced with the <strong>first value</strong> of <code>meta.key</code>.</li>
+          <li>The same rendered body goes to <strong>every recipient</strong>. Values are not matched to recipients by position. To personalise per person, call <a href="#send">/send</a> once per recipient.</li>
+          <li>A key with an empty array is replaced with an empty string.</li>
+          <li>Placeholders without a matching key are left unchanged.</li>
+        </ul>
+        <h3>Responses</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Status</th><th>Body</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-success plain">202</span></td><td><code>2 templated mails queued</code></td><td>Number of mails accepted for delivery.</td></tr>
+            <tr><td><span class="badge badge-warning plain">400</span></td><td><code>recipients and body are required</code></td><td>No recipients, or empty body.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="health" class="doc-section endpoint">
+        <div class="endpoint-head"><span class="m m-get">GET</span><h2>/health</h2><span class="badge badge-neutral plain">No auth</span></div>
+        <p>Liveness probe for load balancers and container orchestrators. Returns <code>200 OK</code> with the body <code>ok</code> while the process is running.</p>
+<pre data-lang="bash" data-title="Request">curl {{BASE}}/health</pre>
+      </section>
+
+      <section id="status" class="doc-section endpoint">
+        <div class="endpoint-head"><span class="m m-get">GET</span><h2>/api/status</h2><span class="badge badge-neutral plain">No auth</span></div>
+        <p>Service status as JSON. Always returns <code>200</code>; check the <code>status</code> field.</p>
+<pre data-lang="json" data-title="200 OK">{
+  "status": "operational",
+  "version": "1.1.0",
+  "uptime_seconds": 86400,
+  "database": "ok",
+  "delivery": "smtp",
+  "workers": 3,
+  "server_time": "2026-09-18T16:40:00Z"
+}</pre>
+        <table class="table doc-table">
+          <thead><tr><th>Field</th><th>Values</th></tr></thead>
+          <tbody>
+            <tr><td><code>status</code></td><td><code>operational</code> or <code>degraded</code> (database unreachable).</td></tr>
+            <tr><td><code>database</code></td><td><code>ok</code> or <code>unavailable</code>.</td></tr>
+            <tr><td><code>delivery</code></td><td><code>smtp</code> for real delivery, <code>simulation</code> when mails are only logged.</td></tr>
+            <tr><td><code>workers</code></td><td>Number of delivery workers.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="errors" class="doc-section">
+        <h2>Errors</h2>
+        <p>These can be returned by any authenticated endpoint. JSON errors always have an <code>error</code> string.</p>
+        <table class="table doc-table">
+          <thead><tr><th>Status</th><th>Error</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-warning plain">400</span></td><td>Validation message (plain text)</td><td>Fix the request body. <code>invalid JSON</code> is also returned for bodies over 1 MB.</td></tr>
+            <tr><td><span class="badge badge-danger plain">401</span></td><td><code>missing API key: …</code></td><td>Send the <code>X-API-Key</code> header.</td></tr>
+            <tr><td><span class="badge badge-danger plain">401</span></td><td><code>invalid API key</code></td><td>Check for typos or whitespace; the key may have been deleted.</td></tr>
+            <tr><td><span class="badge badge-danger plain">403</span></td><td><code>API key is disabled</code></td><td>Contact an administrator.</td></tr>
+            <tr><td><span class="badge badge-danger plain">403</span></td><td><code>IP address … is not allowed for this API key</code></td><td>Call from an allowed IP, or ask for your IP to be added.</td></tr>
+            <tr><td><span class="badge badge-warning plain">429</span></td><td><code>… limit exceeded: …</code></td><td>Wait for <code>Retry-After</code>, or split the request if <code>retry_at</code> is null.</td></tr>
+            <tr><td><span class="badge badge-danger plain">500</span></td><td>Queue error (plain text)</td><td>Retry later.</td></tr>
+            <tr><td><span class="badge badge-danger plain">503</span></td><td><code>authentication temporarily unavailable</code> or <code>could not verify usage limits, try again</code></td><td>The database is unreachable. Retry with backoff.</td></tr>
+          </tbody>
+        </table>
+<pre data-lang="json" data-title="401 Unauthorized">{
+  "error": "invalid API key"
+}</pre>
+      </section>
+
+      <section id="delivery" class="doc-section">
+        <h2>Delivery behaviour</h2>
+        <ul class="doc-list">
+          <li><strong><code>202</code> means queued, not delivered.</strong> Mails are delivered by background workers shortly afterwards.</li>
+          <li>The queue lives in memory. Mails still in the queue are lost if the service restarts, so resend anything critical if you see an outage on the <a href="/#status">status panel</a>.</li>
+          <li>Bodies are sent as plain text. HTML is not rendered.</li>
+          <li>Delivery failures (for example, a rejected address) are logged on the server. They are not reported back to the caller.</li>
+          <li>When <code>delivery</code> is <code>simulation</code>, mails are only logged. Use this for testing.</li>
+        </ul>
+      </section>
+
+      <section id="examples" class="doc-section">
+        <h2>Code examples</h2>
+        <p>Sending one email and handling rate limits correctly.</p>
+        <div class="tabs" data-tabs>
+          <div class="tab-list" role="tablist">
+            <button role="tab" aria-selected="true">cURL</button>
+            <button role="tab" aria-selected="false">Node.js</button>
+            <button role="tab" aria-selected="false">Python</button>
+            <button role="tab" aria-selected="false">Go</button>
+          </div>
+<pre data-lang="bash" role="tabpanel">curl -i -X POST {{BASE}}/send \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{
+    "to": "ada@example.com",
+    "subject": "Password reset",
+    "body": "Use this link to reset your password: https://example.com/reset/abc123"
+  }'</pre>
+<pre data-lang="js" role="tabpanel" hidden>// Node.js 18+ (built-in fetch)
+const BASE_URL = "{{BASE}}";
+
+async function sendMail(to, subject, body) {
+  const res = await fetch(`${BASE_URL}/send`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": process.env.MAIL_API_KEY,
+    },
+    body: JSON.stringify({ to, subject, body }),
+  });
+
+  if (res.status === 202) return;
+
+  if (res.status === 429) {
+    const err = await res.json();
+    const wait = Number(res.headers.get("Retry-After") || 60);
+    throw new Error(`${err.error} (retry in ${wait}s)`);
+  }
+
+  const text = await res.text();
+  throw new Error(`Mail API ${res.status}: ${text}`);
+}
+
+await sendMail("ada@example.com", "Welcome", "Your account is ready.");</pre>
+<pre data-lang="python" role="tabpanel" hidden># pip install requests
+import os
+import requests
+
+BASE_URL = "{{BASE}}"
+
+def send_mail(to, subject, body):
+    res = requests.post(
+        f"{BASE_URL}/send",
+        headers={"X-API-Key": os.environ["MAIL_API_KEY"]},
+        json={"to": to, "subject": subject, "body": body},
+        timeout=10,
+    )
+    if res.status_code == 202:
+        return
+    if res.status_code == 429:
+        err = res.json()
+        wait = int(res.headers.get("Retry-After", 60))
+        raise RuntimeError(f"{err['error']} (retry in {wait}s)")
+    raise RuntimeError(f"Mail API {res.status_code}: {res.text}")
+
+send_mail("ada@example.com", "Welcome", "Your account is ready.")</pre>
+<pre data-lang="go" role="tabpanel" hidden>package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+)
+
+const baseURL = "{{BASE}}"
+
+func sendMail(to, subject, body string) error {
+	payload, _ := json.Marshal(map[string]string{"to": to, "subject": subject, "body": body})
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/send", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", os.Getenv("MAIL_API_KEY"))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusAccepted {
+		return nil
+	}
+	msg, _ := io.ReadAll(res.Body)
+	if res.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("rate limited, retry after %ss: %s", res.Header.Get("Retry-After"), msg)
+	}
+	return fmt.Errorf("mail API %d: %s", res.StatusCode, msg)
+}
+
+func main() {
+	if err := sendMail("ada@example.com", "Welcome", "Your account is ready."); err != nil {
+		fmt.Println(err)
+	}
+}</pre>
+        </div>
+
+        <h3>Bulk send in batches</h3>
+        <p>Keep each bulk request within your hourly limit and back off when you hit it:</p>
+<pre data-lang="js" data-title="Node.js">async function sendBulk(recipients, subject, body, batchSize = 50) {
+  for (let i = 0; i < recipients.length; i += batchSize) {
+    const batch = recipients.slice(i, i + batchSize);
+    for (;;) {
+      const res = await fetch("{{BASE}}/send/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": process.env.MAIL_API_KEY },
+        body: JSON.stringify({ recipients: batch, subject, body }),
+      });
+      if (res.status === 202) break;
+      if (res.status !== 429) throw new Error(`Mail API ${res.status}: ${await res.text()}`);
+
+      const err = await res.json();
+      if (err.retry_at === null) throw new Error("Batch larger than limit: " + err.error);
+      const wait = Number(res.headers.get("Retry-After") || 60);
+      await new Promise((r) => setTimeout(r, wait * 1000));
+    }
+  }
+}</pre>
+      </section>
+
+      <section id="best-practices" class="doc-section">
+        <h2>Best practices</h2>
+        <div class="practice-grid">
+          <div class="practice"><strong>Call from your server</strong><p>Never expose your key in browsers or mobile apps. Proxy requests through your backend.</p></div>
+          <div class="practice"><strong>Store keys as secrets</strong><p>Use environment variables or a secret manager, and keep keys out of logs and source control.</p></div>
+          <div class="practice"><strong>Respect Retry-After</strong><p>On <code>429</code>, wait the number of seconds given before retrying. Don't retry in a tight loop.</p></div>
+          <div class="practice"><strong>Batch sensibly</strong><p>Keep bulk requests within your hourly limit. A request larger than a limit can never succeed.</p></div>
+          <div class="practice"><strong>Lock keys to your IPs</strong><p>Ask for an IP allow list so a leaked key cannot be used from anywhere else.</p></div>
+          <div class="practice"><strong>One key per system</strong><p>Separate keys make usage easy to track and let you revoke one integration without touching others.</p></div>
+        </div>
+      </section>
+
+      <section id="postman" class="doc-section">
+        <h2>Postman collection</h2>
+        <p>The repository includes <code>postman_collection.json</code> with requests for every endpoint. Import it, open the collection's <strong>Variables</strong> tab and set <code>apiKey</code> to your key. Every mail request then sends it as <code>X-API-Key</code>.</p>
+      </section>
+
+      <footer class="docs-footer">
+        <span class="muted">Mail Service API documentation</span>
+        <span class="spacer"></span>
+        <a href="/#request">Request an API key</a>
+        <a href="#introduction">Back to top ↑</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

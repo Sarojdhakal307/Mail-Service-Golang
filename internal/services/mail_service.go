@@ -24,6 +24,11 @@ type SMTPMailer struct {
 	from     string
 }
 
+// SMTPConfigured reports whether real SMTP delivery is configured.
+func SMTPConfigured() bool {
+	return os.Getenv("SMTP_HOST") != "" && os.Getenv("SMTP_PORT") != "" && os.Getenv("SMTP_FROM") != ""
+}
+
 func NewSMTPMailer() MailSender {
 	host := os.Getenv("SMTP_HOST")
 	port := os.Getenv("SMTP_PORT")
@@ -31,7 +36,7 @@ func NewSMTPMailer() MailSender {
 	password := os.Getenv("SMTP_PASSWORD")
 	from := os.Getenv("SMTP_FROM")
 
-	if host == "" || port == "" || from == "" {
+	if !SMTPConfigured() {
 		return &NoopMailer{}
 	}
 

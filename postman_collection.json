@@ -4,6 +4,36 @@
     "description": "Collection for single, bulk, and templated mail requests",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "apiKey",
+      "value": ""
+    }
+  ],
   "item": [
     {
       "name": "Health Check",
@@ -12,8 +42,15 @@
         "header": [],
         "url": {
           "raw": "http://localhost:8080/health",
-          "host": ["http://localhost:8080/health"],
-          "path": ["health"]
+          "host": [
+            "http://localhost:8080/health"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "auth": {
+          "type": "noauth"
         }
       }
     },
@@ -33,8 +70,12 @@
         },
         "url": {
           "raw": "http://localhost:8080/send",
-          "host": ["http://localhost:8080/send"],
-          "path": ["send"]
+          "host": [
+            "http://localhost:8080/send"
+          ],
+          "path": [
+            "send"
+          ]
         }
       }
     },
@@ -54,8 +95,13 @@
         },
         "url": {
           "raw": "http://localhost:8080/send/bulk",
-          "host": ["http://localhost:8080/send/bulk"],
-          "path": ["send", "bulk"]
+          "host": [
+            "http://localhost:8080/send/bulk"
+          ],
+          "path": [
+            "send",
+            "bulk"
+          ]
         }
       }
     },
@@ -75,8 +121,13 @@
         },
         "url": {
           "raw": "http://localhost:8080/send/template",
-          "host": ["http://localhost:8080/send/template"],
-          "path": ["send", "template"]
+          "host": [
+            "http://localhost:8080/send/template"
+          ],
+          "path": [
+            "send",
+            "template"
+          ]
         }
       }
     }

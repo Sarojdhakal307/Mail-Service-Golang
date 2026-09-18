@@ -1,26 +1,28 @@
-package main
+package services
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"mailservice/internal/types"
 )
 
 type fakeSender struct {
-	sent chan MailMessage
+	sent chan types.MailMessage
 }
 
-func (f *fakeSender) Send(ctx context.Context, msg MailMessage) error {
+func (f *fakeSender) Send(ctx context.Context, msg types.MailMessage) error {
 	f.sent <- msg
 	return nil
 }
 
 func TestMailServiceProcessesQueue(t *testing.T) {
-	sender := &fakeSender{sent: make(chan MailMessage, 1)}
+	sender := &fakeSender{sent: make(chan types.MailMessage, 1)}
 	svc := NewMailService(1, sender)
-	go svc.Start()
+	svc.Start()
 
-	err := svc.Enqueue(MailMessage{To: "user@example.com", Subject: "Hello", Body: "Welcome"})
+	err := svc.Enqueue(types.MailMessage{To: "user@example.com", Subject: "Hello", Body: "Welcome"})
 	if err != nil {
 		t.Fatalf("enqueue returned error: %v", err)
 	}
