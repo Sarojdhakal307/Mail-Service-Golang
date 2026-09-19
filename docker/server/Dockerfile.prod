@@ -1,0 +1,23 @@
+# Production image. On the server, from the repository root:
+#   cp docker/server/Dockerfile.prod Dockerfile
+
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . ./
+
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /app/mailservice
+
+FROM alpine:3.20
+WORKDIR /app
+# ca-certificates: verify TLS certificates of SMTP servers. tzdata: correct timestamps in logs.
+RUN apk add --no-cache ca-certificates tzdata \
+    && adduser -D -H mailservice
+COPY --from=builder /app/mailservice /app/mailservice
+USER mailservice
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null "http://127.0.0.1:${PORT:-8080}/health" || exit 1
+ENTRYPOINT ["/app/mailservice"]
