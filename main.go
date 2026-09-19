@@ -54,7 +54,15 @@ func main() {
 		log.Printf("disabled %d super key(s) from a previous SUPER_API_KEY value", revoked)
 	}
 
+	// The queue lives in memory, so mail still waiting when the service last stopped was lost.
+	if lost, err := db.FailInterruptedDeliveries(ctx); err != nil {
+		log.Fatalf("mail history: %v", err)
+	} else if lost > 0 {
+		log.Printf("marked %d mail(s) interrupted by the last shutdown as failed", lost)
+	}
+
 	mailService := services.NewMailService(mailWorkers, services.NewSMTPMailer())
+	mailService.EnableRecording(db, services.DefaultSMTPConfig())
 	mailService.Start()
 
 	adminHandler, err := admin.New(db, admin.Config{
@@ -64,7 +72,9 @@ func main() {
 		TrustProxy:   trustProxy,
 		DefaultSMTP:  services.DefaultSMTPConfig(),
 		SendTest:     services.SendTest,
+		Submit:       mailService.Submit,
 		Enqueue:      mailService.Enqueue,
+		SenderFor:    mailService.SenderFor,
 	})
 	if err != nil {
 		log.Fatalf("admin configuration error: %v", err)
@@ -77,8 +87,10 @@ func main() {
 	if services.SMTPConfigured() {
 		delivery = "smtp"
 	}
-	public.New(db, public.Config{Version: version, Delivery: delivery, Workers: mailWorkers, TrustProxy: trustProxy}).
-		Register(mux)
+	public.New(db, public.Config{
+		Version: version, Delivery: delivery, Workers: mailWorkers, TrustProxy: trustProxy,
+		Submit: mailService.Submit,
+	}).Register(mux)
 	web.Register(mux)
 
 	// Every route needs an API key except the health check, the public site and docs, the public

@@ -95,14 +95,19 @@ func (h *Handler) compose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queued := 0
-	for _, to := range recipients {
-		msg := types.MailMessage{To: to, Subject: subject, Body: body.Body, SMTP: smtp}
-		if err := h.cfg.Enqueue(msg); err != nil {
-			log.Printf("admin: compose enqueue to %s failed: %v", to, err)
-			continue
-		}
-		queued++
+	queued, err := h.cfg.Submit(r.Context(), types.MailBatch{
+		Source:     types.SourceCompose,
+		KeyID:      key.ID,
+		KeyName:    key.Name,
+		Path:       composePath,
+		IP:         entry.IP,
+		Recipients: recipients,
+		Subject:    subject,
+		Body:       body.Body,
+		SMTP:       smtp,
+	})
+	if err != nil {
+		log.Printf("admin: compose submit failed: %v", err)
 	}
 
 	via := "the default SMTP server"

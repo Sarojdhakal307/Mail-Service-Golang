@@ -354,3 +354,83 @@ func TestKeySMTPSettings(t *testing.T) {
 		t.Fatalf("expected default SMTP, got %+v, %v", cfg, err)
 	}
 }
+
+func TestMailHistory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	key, _, err := s.CreateKey(ctx, KeyInput{Name: "history"}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	t.Cleanup(func() { s.DeleteKey(ctx, key.ID) })
+
+	rec := MailRecord{APIKeyID: key.ID, KeyName: key.Name, Source: "api", Path: "/send/bulk", IP: "127.0.0.1",
+		Sender: "no-reply@example.com", SMTPHost: "smtp.example.com:587", Subject: "Hello", Body: "Body text"}
+	recipients := []string{"a@example.com", "b@example.com", "c@example.com"}
+	ids, err := s.RecordMail(ctx, rec, recipients)
+	if err != nil || len(ids) != 3 {
+		t.Fatalf("record: %v, %v", ids, err)
+	}
+	for i, id := range ids {
+		d, err := s.GetMail(ctx, id)
+		if err != nil {
+			t.Fatalf("get %d: %v", id, err)
+		}
+		if d.Recipient != recipients[i] || d.Body != "Body text" || d.Status != MailQueued || d.Sender != rec.Sender {
+			t.Fatalf("delivery %d does not match recipient %d: %+v", id, i, d)
+		}
+	}
+
+	if err := s.MarkDelivery(ctx, ids[0], MailSending, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkDelivery(ctx, ids[0], MailSent, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkDelivery(ctx, ids[1], MailFailed, "550 mailbox unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	sent, _ := s.GetMail(ctx, ids[0])
+	if sent.Status != MailSent || sent.SentAt == nil || sent.Attempts != 1 {
+		t.Fatalf("expected sent with one attempt, got %+v", sent)
+	}
+
+	if err := s.RequeueDelivery(ctx, ids[0], "x@example.com", "h:25"); !errors.Is(err, ErrNotRetryable) {
+		t.Fatalf("expected sent mail not to be retryable, got %v", err)
+	}
+	if err := s.RequeueDelivery(ctx, ids[1], "new@example.com", "smtp2.example.com:465"); err != nil {
+		t.Fatalf("requeue failed mail: %v", err)
+	}
+	retried, _ := s.GetMail(ctx, ids[1])
+	if retried.Status != MailQueued || retried.Error != "" || retried.Sender != "new@example.com" {
+		t.Fatalf("expected requeued mail with new sender, got %+v", retried)
+	}
+
+	list, err := s.ListMails(ctx, MailFilter{KeyID: key.ID})
+	if err != nil || len(list) != 3 || list[0].ID != ids[2] || list[0].Body != "" {
+		t.Fatalf("expected 3 mails newest first without bodies, got %d, %v", len(list), err)
+	}
+	found, err := s.ListMails(ctx, MailFilter{KeyID: key.ID, Query: "B@EXAMPLE"})
+	if err != nil || len(found) != 1 || found[0].ID != ids[1] {
+		t.Fatalf("expected case-insensitive search to find b@, got %v, %v", found, err)
+	}
+	page, err := s.ListMails(ctx, MailFilter{KeyID: key.ID, BeforeID: ids[2], Limit: 1})
+	if err != nil || len(page) != 1 || page[0].ID != ids[1] {
+		t.Fatalf("expected paging before the newest mail, got %v, %v", page, err)
+	}
+	counts, err := s.MailCounts(ctx, MailFilter{KeyID: key.ID, Status: MailSent})
+	if err != nil || counts[MailSent] != 1 || counts[MailQueued] != 2 {
+		t.Fatalf("unexpected counts %v, %v", counts, err)
+	}
+
+	// History outlives the key that sent it.
+	if err := s.DeleteKey(ctx, key.ID); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := s.GetMail(ctx, ids[0])
+	if err != nil || kept.APIKeyID != nil || kept.KeyName != "history" {
+		t.Fatalf("expected mail kept after key deletion, got %+v, %v", kept, err)
+	}
+	t.Cleanup(func() { s.db.Exec(`DELETE FROM mail_messages WHERE id = $1`, kept.MailID) })
+}

@@ -155,8 +155,33 @@ td.right, th.right { text-align: right; }
 .smtp-cell .sub { word-break: break-word; }
 .form-ok { padding: 10px 12px; border-radius: 10px; background: var(--success-soft); border: 1px solid rgba(52, 211, 153, .3); color: #a7f3d0; font-size: 13px; }
 
+/* Mail history */
+.mail-status-bar { padding-top: 12px; padding-bottom: 12px; }
+.mail-status-bar .segmented { flex-wrap: wrap; }
+.seg-count { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 2px; }
+.seg-count:empty { display: none; }
+.mail-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-subject { max-width: 220px; }
+.mail-subject .sub { overflow: hidden; text-overflow: ellipsis; }
+.mail-subject .bad { color: var(--danger); }
+.mail-row { cursor: pointer; }
+.mail-row:hover td { background: var(--surface-2); }
+.load-more { display: flex; justify-content: center; padding: 14px; border-top: 1px solid var(--border); }
+.mail-head { min-width: 0; }
+.mail-head h2 { word-break: break-word; }
+.mail-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; margin: 0; font-size: 13.5px; }
+.mail-meta dt { color: var(--muted); font-weight: 600; }
+.mail-meta dd { margin: 0; color: var(--text); word-break: break-word; }
+.mail-meta .bad { color: var(--danger); }
+.mail-body { margin: 0; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6;
+  color: var(--text-2); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+@media (max-width: 560px) {
+  .mail-meta { grid-template-columns: 1fr; gap: 2px; }
+  .mail-meta dd { margin-bottom: 8px; }
+}
+
 /* Tall dialogs scroll inside instead of overflowing the screen. */
-dialog.modal > form { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+dialog.modal > form, dialog.modal#mail-dialog[open] { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 dialog.modal .modal-body { overflow-y: auto; }
 
 .scrim { position: fixed; inset: 0; background: rgba(6, 5, 12, .6); z-index: 25; }

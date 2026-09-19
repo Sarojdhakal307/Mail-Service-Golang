@@ -68,3 +68,36 @@ ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_port TEXT NOT NULL DEFAULT ''
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_username TEXT NOT NULL DEFAULT '';
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_from TEXT NOT NULL DEFAULT '';
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_password_encrypted BYTEA;
+
+-- Mail history: one row per message, and one delivery row per recipient with its status.
+-- Rows are kept when the sending key is deleted; key_name keeps the name it had.
+CREATE TABLE IF NOT EXISTS mail_messages (
+    id         BIGSERIAL PRIMARY KEY,
+    api_key_id BIGINT      REFERENCES api_keys (id) ON DELETE SET NULL,
+    key_name   TEXT        NOT NULL DEFAULT '',
+    source     TEXT        NOT NULL,
+    path       TEXT        NOT NULL DEFAULT '',
+    ip         TEXT        NOT NULL DEFAULT '',
+    subject    TEXT        NOT NULL DEFAULT '',
+    body       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mail_deliveries (
+    id         BIGSERIAL PRIMARY KEY,
+    mail_id    BIGINT      NOT NULL REFERENCES mail_messages (id) ON DELETE CASCADE,
+    position   INTEGER     NOT NULL,
+    recipient  TEXT        NOT NULL,
+    sender     TEXT        NOT NULL DEFAULT '',
+    smtp_host  TEXT        NOT NULL DEFAULT '',
+    status     TEXT        NOT NULL DEFAULT 'queued',
+    error      TEXT        NOT NULL DEFAULT '',
+    attempts   INTEGER     NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS mail_messages_key_idx ON mail_messages (api_key_id, id DESC);
+CREATE INDEX IF NOT EXISTS mail_deliveries_mail_idx ON mail_deliveries (mail_id);
+CREATE INDEX IF NOT EXISTS mail_deliveries_status_idx ON mail_deliveries (status) WHERE status IN ('queued', 'sending', 'failed');

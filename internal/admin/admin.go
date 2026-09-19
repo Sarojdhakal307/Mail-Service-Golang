@@ -45,6 +45,11 @@ type Store interface {
 	ListKeyRequests(ctx context.Context) ([]*store.KeyRequest, error)
 	ApproveKeyRequest(ctx context.Context, id int64, in store.KeyInput, adminIP string) (*store.APIKey, string, error)
 	RejectKeyRequest(ctx context.Context, id int64) error
+	ListMails(ctx context.Context, f store.MailFilter) ([]*store.MailDelivery, error)
+	MailCounts(ctx context.Context, f store.MailFilter) (map[string]int, error)
+	GetMail(ctx context.Context, id int64) (*store.MailDelivery, error)
+	RequeueDelivery(ctx context.Context, id int64, sender, smtpHost string) error
+	MarkDelivery(ctx context.Context, id int64, status, errMsg string) error
 }
 
 type Config struct {
@@ -56,8 +61,12 @@ type Config struct {
 	DefaultSMTP *types.SMTPConfig
 	// SendTest delivers a message synchronously, for the "send test email" action.
 	SendTest func(ctx context.Context, cfg types.SMTPConfig, msg types.MailMessage) error
-	// Enqueue hands a message to the delivery queue, for mail composed in the admin UI.
+	// Submit records and queues mail composed in the admin UI.
+	Submit func(ctx context.Context, b types.MailBatch) (int, error)
+	// Enqueue hands a recorded mail back to the delivery queue, for retries.
 	Enqueue func(msg types.MailMessage) error
+	// SenderFor returns the From address and host:port mail through smtp goes out with.
+	SenderFor func(smtp *types.SMTPConfig) (from, host string)
 }
 
 type Handler struct {
@@ -103,6 +112,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /admin/api/keys/{id}", h.requireSession(h.deleteKey))
 	mux.HandleFunc("GET /admin/api/logs", h.requireSession(h.listLogs))
 	mux.HandleFunc("POST /admin/api/compose", h.requireSession(h.compose))
+	mux.HandleFunc("GET /admin/api/mails", h.requireSession(h.listMails))
+	mux.HandleFunc("GET /admin/api/mails/{id}", h.requireSession(h.getMail))
+	mux.HandleFunc("POST /admin/api/mails/{id}/retry", h.requireSession(h.retryMail))
 	mux.HandleFunc("GET /admin/api/requests", h.requireSession(h.listRequests))
 	mux.HandleFunc("POST /admin/api/requests/{id}/approve", h.requireSession(h.approveRequest))
 	mux.HandleFunc("POST /admin/api/requests/{id}/reject", h.requireSession(h.rejectRequest))

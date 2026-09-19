@@ -7,11 +7,13 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"mailservice/internal/auth"
 	"mailservice/internal/store"
+	"mailservice/internal/types"
 )
 
 const (
@@ -30,6 +32,8 @@ type Config struct {
 	Delivery   string // "smtp" or "simulation"
 	Workers    int
 	TrustProxy bool
+	// Submit queues mail. It sends the auto-reply to new key requests; nil disables it.
+	Submit func(ctx context.Context, b types.MailBatch) (int, error)
 }
 
 type Handler struct {
@@ -114,10 +118,45 @@ func (h *Handler) createRequest(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.record(ip)
 		log.Printf("public: key request %d from %s <%s>", req.ID, ip, req.Email)
+		h.sendAutoReply(r.Context(), req)
 		auth.WriteJSON(w, http.StatusCreated, map[string]string{
 			"message": "Thanks, " + req.Name + ". Your request was received and we will contact you at " + req.Email + ".",
 		})
 	}
+}
+
+// sendAutoReply confirms a new key request to the requester, through the default SMTP
+// server. It is recorded in the mail history as system mail. A failure does not affect the
+// request, which is already saved.
+func (h *Handler) sendAutoReply(ctx context.Context, req *store.KeyRequest) {
+	if h.cfg.Submit == nil {
+		return
+	}
+	subject, body := autoReply(req)
+	_, err := h.cfg.Submit(ctx, types.MailBatch{
+		Source:     types.SourceSystem,
+		KeyName:    "Auto-reply",
+		Path:       "/api/key-requests",
+		IP:         req.IP,
+		Recipients: []string{req.Email},
+		Subject:    subject,
+		Body:       body,
+	})
+	if err != nil {
+		log.Printf("public: auto-reply for key request %d: %v", req.ID, err)
+	}
+}
+
+func autoReply(req *store.KeyRequest) (subject, body string) {
+	subject = "Thank you for registering with Mail Service"
+	body = "Hi " + req.Name + ",\n\n" +
+		"Thank you for registering with Mail Service.\n\n" +
+		"We have received your API key request (reference #" + strconv.FormatInt(req.ID, 10) + "). " +
+		"We will review it and reply to you very soon.\n\n" +
+		"If you did not send this request, you can ignore this email.\n\n" +
+		"Mail Service\n\n" +
+		"This is an automatic message. Please do not reply to it."
+	return subject, body
 }
 
 func (h *Handler) allow(ip string) bool {

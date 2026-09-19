@@ -55,6 +55,7 @@
         <p class="toc-title">Reference</p>
         <a href="#errors">Errors</a>
         <a href="#delivery">Delivery behaviour</a>
+        <a href="#own-smtp">Your own SMTP server</a>
         <a href="#examples">Code examples</a>
         <a href="#best-practices">Best practices</a>
         <a href="#postman">Postman collection</a>
@@ -360,12 +361,42 @@ Retry-After: 1834</pre>
         <h2>Delivery behaviour</h2>
         <ul class="doc-list">
           <li><strong><code>202</code> means queued, not delivered.</strong> Mails are delivered by background workers shortly afterwards.</li>
-          <li><strong>Each API key can have its own SMTP server.</strong> Mail sent with your key goes out through the server and From address an administrator assigned to it. Keys without one use the service's default server.</li>
+          <li><strong>Each API key can have its own SMTP server.</strong> Mail sent with your key goes out through the server and From address an administrator assigned to it. Keys without one use the service's default server. See <a href="#own-smtp">Your own SMTP server</a>.</li>
           <li>The queue lives in memory. Mails still in the queue are lost if the service restarts, so resend anything critical if you see an outage on the <a href="/#status">status panel</a>.</li>
           <li>Bodies are sent as plain UTF-8 text. HTML is not rendered. Line breaks in <code>subject</code> are replaced with spaces.</li>
-          <li>Delivery failures (for example, a rejected address) are logged on the server. They are not reported back to the caller.</li>
+          <li>Delivery failures (for example, a rejected address) are recorded on the server. They are not reported back to the caller. An administrator can see them and send failed mail again.</li>
+          <li><strong>Every mail is recorded.</strong> The service keeps each mail's sender, recipient, subject, body and delivery status so administrators can trace and troubleshoot delivery.</li>
           <li>When <code>delivery</code> is <code>simulation</code>, mails are only logged. Use this for testing.</li>
         </ul>
+      </section>
+
+      <section id="own-smtp" class="doc-section">
+        <h2>Your own SMTP server</h2>
+        <p>By default, mail goes out through the service's own SMTP server. You can ask for your key to use your own mail host instead, so mail is sent from your domain and address. The API calls stay exactly the same.</p>
+
+        <h3>How to request it</h3>
+        <ol class="doc-list numbered">
+          <li>In the <a href="/#request">request form</a>, tick <strong>Send through my own SMTP server</strong> and fill in the details below.</li>
+          <li>An administrator reviews the request. If it is approved, they contact you by email to get the SMTP password privately.</li>
+          <li>Once the server is set on your key, every mail sent with that key goes through it.</li>
+        </ol>
+        <p>Already have a key? Send a new request with the same details and mention your existing key in the message.</p>
+
+        <h3>Details we need</h3>
+        <table class="table doc-table">
+          <thead><tr><th>Setting</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>SMTP host</td><td>Yes</td><td>Your mail server, for example <code>smtp.gmail.com</code> or <code>smtp.office365.com</code>.</td></tr>
+            <tr><td>Port</td><td>No</td><td><code>587</code> if left empty. Port <code>465</code> uses implicit TLS. Other ports use STARTTLS when the server offers it.</td></tr>
+            <tr><td>Username</td><td>No</td><td>The account used to sign in to the SMTP server. Leave empty if your server does not need a login.</td></tr>
+            <tr><td>Password</td><td>If a username is set</td><td>Never put it in the form. We ask for it privately after approval, and it is stored encrypted.</td></tr>
+            <tr><td>From address</td><td>Yes</td><td>The address your mail is sent from, for example <code>no-reply@yourdomain.com</code>.</td></tr>
+          </tbody>
+        </table>
+
+        <div class="note note-primary">
+          <strong>Before you ask:</strong> make sure your SMTP account is allowed to send from the From address, and that your domain's SPF and DKIM records include your mail server. Otherwise mail may be rejected or land in spam. Many providers, such as Gmail, need an app password instead of your normal password.
+        </div>
       </section>
 
       <section id="examples" class="doc-section">

@@ -10,6 +10,10 @@ const state = {
   keyFilter: "all",
   keySearch: "",
   requestFilter: "pending",
+  mails: [],
+  mailCounts: null,
+  mailFilter: { status: "", key: "", q: "" },
+  mailHasMore: false,
   dialogMode: null, // { type: "create" } | { type: "edit", key } | { type: "approve", request }
 };
 
@@ -17,6 +21,7 @@ const VIEWS = {
   keys: { title: "API keys", sub: "Create keys, set limits and watch usage." },
   requests: { title: "Access requests", sub: "Review API key requests submitted from the public site." },
   logs: { title: "Request log", sub: "Every authenticated request, newest first." },
+  mails: { title: "Mail history", sub: "Every mail sent, with its sender, recipient, message and delivery status." },
   compose: { title: "Compose mail", sub: "Send an email as any API key, through its SMTP server and limits." },
 };
 
@@ -81,6 +86,8 @@ const ICONS = {
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
   send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
 };
 
 // icon returns an SVG built from the fixed ICONS table above (never from user data).
@@ -179,11 +186,12 @@ function setView(name) {
     a.classList.toggle("active", active);
     if (active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
-  document.querySelector(".stats").classList.toggle("hidden", name === "compose");
+  document.querySelector(".stats").classList.toggle("hidden", name === "compose" || name === "mails");
   $("page-title").textContent = VIEWS[name].title;
   $("page-sub").textContent = VIEWS[name].sub;
   document.title = VIEWS[name].title + " · Mail Service Admin";
   setSidebar(false);
+  if (name === "mails" && !$("app-view").classList.contains("hidden")) loadMails();
 }
 
 function setSidebar(open) {
@@ -206,6 +214,7 @@ async function refresh() {
   } catch (err) {
     toast(err.message, "error");
   }
+  loadMails();
 }
 
 function renderAll() {
@@ -215,6 +224,7 @@ function renderAll() {
   renderLogFilter();
   renderLogs();
   renderComposeKeys();
+  renderMailKeyFilter();
 }
 
 // ---------- stats ----------
@@ -298,6 +308,7 @@ function renderKeys() {
       iconButton("edit", "Edit key", () => openKeyDialog({ type: "edit", key })),
       iconButton(key.active ? "pause" : "play", key.active ? "Disable key" : "Enable key", () => toggleKey(key)),
       iconButton("logs", "View request log", () => { $("log-filter").value = String(key.id); location.hash = "logs"; loadLogs(); }),
+      iconButton("history", "View sent mail", () => showMailsFor(String(key.id))),
       iconButton("trash", "Delete key", () => deleteKey(key), "danger-hover"));
 
     body.append(el("tr", {},
@@ -356,7 +367,7 @@ async function toggleKey(key) {
 
 async function deleteKey(key) {
   const ok = await confirmAction("Delete “" + key.name + "”?",
-    "Clients using this key will stop working immediately and its request history will be removed. This cannot be undone.", "Delete key");
+    "Clients using this key will stop working immediately and its request log will be removed. Its mail history is kept. This cannot be undone.", "Delete key");
   if (!ok) return;
   try {
     await api("DELETE", "/keys/" + key.id);
@@ -633,7 +644,7 @@ function renderComposeSide() {
       el("div", {}, el("dt", { text: "SMTP server" }), el("dd", { class: key.smtp ? "mono" : "", text: key.smtp ? key.smtp.host + ":" + key.smtp.port : "Default server" })),
       el("div", {}, el("dt", { text: "Limits" }), quota)),
     !key.is_super && el("div", { class: "usage-box" }, usageCell(key)),
-    el("p", { class: "side-note", text: "Counted against this key's limits and recorded in its request log as /admin/compose. The key's IP allow list does not apply to mail you send from here." }));
+    el("p", { class: "side-note", text: "Counted against this key's limits, recorded in its request log as /admin/compose and kept in Mail history. The key's IP allow list does not apply to mail you send from here." }));
 }
 
 function updateComposeHints() {
@@ -811,6 +822,190 @@ function renderLogs() {
   }
 }
 
+// ---------- mail history ----------
+
+const MAIL_BADGE = { queued: "badge-info", sending: "badge-primary", sent: "badge-success", failed: "badge-danger", simulated: "badge-neutral" };
+const MAIL_LABEL = { queued: "Queued", sending: "Sending", sent: "Sent", failed: "Failed", simulated: "Simulated" };
+const SOURCE_LABEL = { api: "API", compose: "Admin compose", system: "Auto-reply" };
+const MAIL_PAGE = 100;
+
+let mailSeq = 0;
+
+function mailQuery(before) {
+  const f = state.mailFilter;
+  const p = new URLSearchParams({ limit: String(MAIL_PAGE) });
+  if (f.status) p.set("status", f.status);
+  if (f.q.trim()) p.set("q", f.q.trim());
+  if (f.key === "system") p.set("source", "system");
+  else if (f.key) p.set("key_id", f.key);
+  if (before) p.set("before", String(before));
+  return "/mails?" + p;
+}
+
+// loadMails reloads the first page, or appends the next one when `more` is set. Only the
+// newest call's result is shown, so a slow response cannot overwrite a newer filter.
+async function loadMails(more) {
+  const seq = ++mailSeq;
+  const before = more && state.mails.length ? state.mails[state.mails.length - 1].id : 0;
+  try {
+    const res = await api("GET", mailQuery(before));
+    if (seq !== mailSeq) return;
+    state.mails = more ? state.mails.concat(res.mails) : res.mails;
+    state.mailHasMore = res.mails.length === MAIL_PAGE;
+    state.mailCounts = res.counts;
+    renderMailBadge(res.failed_total);
+    renderMails();
+  } catch (err) {
+    if (seq === mailSeq) toast(err.message, "error");
+  }
+}
+
+function renderMailBadge(failed) {
+  $("nav-failed-count").textContent = String(failed || 0);
+  $("nav-failed-count").classList.toggle("hidden", !failed);
+}
+
+function renderMailKeyFilter() {
+  const select = $("mail-key");
+  const current = select.value;
+  setChildren(select,
+    el("option", { value: "", text: "All senders" }),
+    el("option", { value: "system", text: "Auto-replies (system)" }),
+    state.keys.map((k) => el("option", { value: String(k.id), text: k.name })));
+  const valid = current === "" || current === "system" || state.keys.some((k) => String(k.id) === current);
+  select.value = valid ? current : "";
+  state.mailFilter.key = select.value;
+}
+
+function showMailsFor(key) {
+  $("mail-key").value = key;
+  state.mailFilter.key = key;
+  if (location.hash === "#mails") loadMails(); else location.hash = "mails";
+}
+
+function mailSender(m) {
+  if (m.source === "system") return el("span", {}, el("span", { text: "Auto-reply" }), el("span", { class: "sub", text: "Key request" }));
+  const deleted = m.api_key_id === null;
+  return el("span", {},
+    el("span", { class: deleted ? "muted" : "", text: m.key_name + (deleted ? " (deleted)" : "") }),
+    el("span", { class: "sub", text: SOURCE_LABEL[m.source] || m.source }));
+}
+
+function mailBadge(status) {
+  return el("span", { class: "badge " + (MAIL_BADGE[status] || "badge-neutral"), text: MAIL_LABEL[status] || status });
+}
+
+function renderMails() {
+  const counts = state.mailCounts || {};
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  document.querySelectorAll("#mail-status [data-count]").forEach((n) => {
+    const v = n.dataset.count === "all" ? total : counts[n.dataset.count] || 0;
+    n.textContent = state.mailCounts ? fmt(v) : "";
+  });
+  const open = (counts.queued || 0) + (counts.sending || 0);
+  $("mail-live").textContent = open ? fmt(open) + " in progress · updating automatically" : "";
+
+  const body = $("mails-body");
+  setChildren(body);
+  if (!state.mails.length) {
+    const filtered = state.mailFilter.status || state.mailFilter.key || state.mailFilter.q.trim();
+    body.append(emptyState("mail", filtered ? "No matching mail" : "No mail sent yet",
+      filtered ? "Try a different search or filter." : "Mail sent through the API, Compose or the request auto-reply shows up here.", 7));
+  }
+  for (const m of state.mails) {
+    body.append(el("tr", { class: "mail-row", onclick: () => openMail(m.id) },
+      el("td", { class: "nowrap", title: fullTime(m.created_at), text: relTime(m.created_at) }),
+      el("td", {}, mailSender(m)),
+      el("td", { class: "mail-cell", title: m.sender || "Simulation (no SMTP server)" },
+        m.sender ? el("span", { text: m.sender }) : el("span", { class: "muted", text: "Simulation" }),
+        m.smtp_host && el("span", { class: "sub mono", text: m.smtp_host })),
+      el("td", { class: "mail-cell", title: m.recipient, text: m.recipient }),
+      el("td", { class: "mail-subject" },
+        el("span", { class: "mail-cell block", text: m.subject || "(no subject)" }),
+        m.status === "failed" && m.error && el("span", { class: "sub mail-cell bad", title: m.error, text: m.error })),
+      el("td", {}, mailBadge(m.status)),
+      el("td", {}, el("div", { class: "actions" },
+        iconButton("eye", "View mail", (e) => { e.stopPropagation(); openMail(m.id); })))));
+  }
+  $("mail-more-wrap").classList.toggle("hidden", !state.mailHasMore);
+}
+
+let openMailId = null;
+
+async function openMail(id) {
+  openMailId = id;
+  setError("mail-error", "");
+  $("mail-title").textContent = "Loading…";
+  $("mail-sub").textContent = "";
+  setChildren($("mail-meta"));
+  $("mail-body").textContent = "";
+  $("mail-retry").classList.add("hidden");
+  $("mail-retry-note").classList.add("hidden");
+  if (!$("mail-dialog").open) $("mail-dialog").showModal();
+  try {
+    renderMailDetail(await api("GET", "/mails/" + id));
+  } catch (err) {
+    $("mail-title").textContent = "Mail";
+    setError("mail-error", err.message);
+  }
+}
+
+function renderMailDetail(m) {
+  $("mail-title").textContent = m.subject || "(no subject)";
+  setChildren($("mail-sub"), mailBadge(m.status), " ", m.recipient);
+  const row = (label, value, cls) => value && [el("dt", { text: label }), el("dd", { class: cls || "", text: value })];
+  const sentWith = m.source === "system" ? "Auto-reply to a key request"
+    : m.key_name + (m.api_key_id === null ? " (deleted)" : "") + " · " + (SOURCE_LABEL[m.source] || m.source);
+  setChildren($("mail-meta"),
+    row("To", m.recipient),
+    row("From", m.sender || "Simulation (no SMTP server configured)"),
+    row("SMTP server", m.smtp_host, "mono"),
+    row("Sent with", sentWith),
+    row("Endpoint", m.path, "mono"),
+    row("Client IP", m.ip, "mono"),
+    row("Queued", fullTime(m.created_at)),
+    m.sent_at ? row(m.status === "simulated" ? "Logged" : "Delivered", fullTime(m.sent_at)) : row("Last update", fullTime(m.updated_at)),
+    row("Attempts", String(m.attempts)),
+    row("Error", m.error, "bad"));
+  $("mail-body").textContent = m.body;
+
+  const canRetry = m.status === "failed";
+  $("mail-retry").classList.toggle("hidden", !canRetry);
+  $("mail-retry-note").classList.toggle("hidden", !canRetry);
+}
+
+$("mail-retry").addEventListener("click", async () => {
+  const button = $("mail-retry");
+  button.disabled = true;
+  setError("mail-error", "");
+  try {
+    const res = await api("POST", "/mails/" + openMailId + "/retry");
+    toast(res.message);
+    await Promise.all([openMail(openMailId), loadMails()]);
+  } catch (err) {
+    setError("mail-error", err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+let mailSearchTimer = null;
+$("mail-search").addEventListener("input", (e) => {
+  state.mailFilter.q = e.target.value;
+  clearTimeout(mailSearchTimer);
+  mailSearchTimer = setTimeout(() => loadMails(), 300);
+});
+$("mail-key").addEventListener("change", (e) => { state.mailFilter.key = e.target.value; loadMails(); });
+$("mail-more").addEventListener("click", () => loadMails(true));
+
+// While mail is queued or being sent, keep the list current so statuses update on their own.
+setInterval(() => {
+  const c = state.mailCounts;
+  if (state.view !== "mails" || document.hidden || !c || !(c.queued || c.sending)) return;
+  if ($("app-view").classList.contains("hidden") || state.mails.length > MAIL_PAGE) return;
+  loadMails();
+}, 5000);
+
 // ---------- events ----------
 
 function bindSegmented(id, onChange) {
@@ -824,6 +1019,7 @@ function bindSegmented(id, onChange) {
 
 bindSegmented("key-filter", (f) => { state.keyFilter = f; renderKeys(); });
 bindSegmented("request-filter", (f) => { state.requestFilter = f; renderRequests(); });
+bindSegmented("mail-status", (f) => { state.mailFilter.status = f; loadMails(); });
 $("key-search").addEventListener("input", (e) => { state.keySearch = e.target.value; renderKeys(); });
 $("log-filter").addEventListener("change", loadLogs);
 $("log-status").addEventListener("change", renderLogs);

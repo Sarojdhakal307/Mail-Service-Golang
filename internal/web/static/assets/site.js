@@ -74,6 +74,39 @@ form.elements.message.addEventListener("input", (e) => {
   $("message-count").textContent = String(e.target.value.length);
 });
 
+// Own SMTP server: the fields have no name, so they are sent as a block appended to the message.
+const smtpToggle = $("smtp-toggle");
+smtpToggle.addEventListener("change", () => {
+  $("smtp-fields").classList.toggle("hidden", !smtpToggle.checked);
+  smtpToggle.setAttribute("aria-expanded", String(smtpToggle.checked));
+});
+
+function smtpField(key) {
+  return form.querySelector(`[data-smtp="${key}"]`);
+}
+
+// Returns [field, error] for invalid input, or [null, text] with the block to append.
+function smtpBlock() {
+  const v = (key) => smtpField(key).value.trim();
+  if (!v("host")) return [smtpField("host"), "Please enter your SMTP host."];
+  if (v("port") && !/^\d+$/.test(v("port"))) return [smtpField("port"), "The SMTP port must be a number, e.g. 587."];
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v("from"))) return [smtpField("from"), "Please enter a valid From address."];
+  const lines = [
+    "Own SMTP server requested:",
+    `Host: ${v("host")}`,
+    `Port: ${v("port") || "587"}`,
+    `Username: ${v("username") || "(none)"}`,
+    `From: ${v("from")}`,
+  ];
+  return [null, lines.join("\n")];
+}
+
+function markInvalid(field, message) {
+  field.setAttribute("aria-invalid", "true");
+  field.focus();
+  showFormError(message);
+}
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
@@ -81,11 +114,21 @@ form.addEventListener("submit", async (e) => {
 
   const problem = clientValidate(data);
   if (problem) {
-    const field = form.elements[problem[0]];
-    field.setAttribute("aria-invalid", "true");
-    field.focus();
-    showFormError(problem[1]);
+    markInvalid(form.elements[problem[0]], problem[1]);
     return;
+  }
+
+  if (smtpToggle.checked) {
+    const [field, text] = smtpBlock();
+    if (field) {
+      markInvalid(field, text);
+      return;
+    }
+    data.message = data.message.trim() ? `${data.message.trim()}\n\n${text}` : text;
+    if (data.message.length > 5000) {
+      markInvalid(form.elements.message, "Your message is too long to include the SMTP details. Please shorten it.");
+      return;
+    }
   }
 
   const button = $("request-submit");

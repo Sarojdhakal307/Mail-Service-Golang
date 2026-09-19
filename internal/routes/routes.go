@@ -52,15 +52,19 @@ func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota
 			return
 		}
 
-		smtp, ok := reserve(w, r, quota, 1)
+		batch, ok := reserve(w, r, quota, 1)
 		if !ok {
 			return
 		}
-		msg.SMTP = smtp
+		batch.Recipients = []string{strings.TrimSpace(msg.To)}
+		if batch.Recipients[0] == "" {
+			batch.Recipients[0] = strings.TrimSpace(msg.Target)
+		}
+		batch.Subject, batch.Body = msg.Subject, msg.Body
 
-		if err := mailService.Enqueue(msg); err != nil {
+		if queued, err := mailService.Submit(r.Context(), batch); err != nil || queued == 0 {
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			_, _ = w.Write([]byte("mail could not be queued"))
 			return
 		}
 
@@ -88,19 +92,15 @@ func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota
 			return
 		}
 
-		smtp, ok := reserve(w, r, quota, len(recipients))
+		batch, ok := reserve(w, r, quota, len(recipients))
 		if !ok {
 			return
 		}
+		batch.Recipients, batch.Subject, batch.Body = recipients, req.Subject, req.Body
 
-		queued := 0
-		for _, recipient := range recipients {
-			msg := types.MailMessage{To: recipient, Subject: req.Subject, Body: req.Body, SMTP: smtp}
-			if err := mailService.Enqueue(msg); err != nil {
-				log.Printf("bulk enqueue failed for %s: %v", recipient, err)
-				continue
-			}
-			queued++
+		queued, err := mailService.Submit(r.Context(), batch)
+		if err != nil {
+			log.Printf("bulk submit failed: %v", err)
 		}
 
 		w.WriteHeader(http.StatusAccepted)
@@ -127,20 +127,16 @@ func RegisterRoutes(mux *http.ServeMux, mailService *services.MailService, quota
 			return
 		}
 
-		smtp, ok := reserve(w, r, quota, len(recipients))
+		batch, ok := reserve(w, r, quota, len(recipients))
 		if !ok {
 			return
 		}
+		// Every recipient gets the same rendered body, so the batch is stored once.
+		batch.Recipients, batch.Subject, batch.Body = recipients, req.Subject, services.RenderTemplate(req.Body, req.Meta)
 
-		queued := 0
-		for _, recipient := range recipients {
-			body := services.RenderTemplate(req.Body, req.Meta)
-			msg := types.MailMessage{To: recipient, Subject: req.Subject, Body: body, SMTP: smtp}
-			if err := mailService.Enqueue(msg); err != nil {
-				log.Printf("template enqueue failed for %s: %v", recipient, err)
-				continue
-			}
-			queued++
+		queued, err := mailService.Submit(r.Context(), batch)
+		if err != nil {
+			log.Printf("template submit failed: %v", err)
 		}
 
 		w.WriteHeader(http.StatusAccepted)
@@ -159,9 +155,25 @@ func nonBlank(values []string) []string {
 }
 
 // reserve resolves the caller's SMTP server and charges n mails to its API key. It returns
-// the SMTP server to use (nil for the default), or writes the error response and returns
-// false when the request must not proceed.
-func reserve(w http.ResponseWriter, r *http.Request, quota Quota, n int) (*types.SMTPConfig, bool) {
+// a batch filled in with the caller's key, IP and SMTP server, or writes the error response
+// and returns false when the request must not proceed.
+func reserve(w http.ResponseWriter, r *http.Request, quota Quota, n int) (types.MailBatch, bool) {
+	smtp, ok := reserveSMTP(w, r, quota, n)
+	if !ok {
+		return types.MailBatch{}, false
+	}
+	caller, _ := auth.CallerFrom(r.Context())
+	return types.MailBatch{
+		Source:  types.SourceAPI,
+		KeyID:   caller.Key.ID,
+		KeyName: caller.Key.Name,
+		Path:    r.URL.Path,
+		IP:      caller.IP,
+		SMTP:    smtp,
+	}, true
+}
+
+func reserveSMTP(w http.ResponseWriter, r *http.Request, quota Quota, n int) (*types.SMTPConfig, bool) {
 	caller, ok := auth.CallerFrom(r.Context())
 	if !ok {
 		auth.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing API key"})

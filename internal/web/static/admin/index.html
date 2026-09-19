@@ -56,6 +56,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           Request log
         </a>
+        <a href="#mails" data-view="mails">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+          Mail history <span class="count count-alert hidden" id="nav-failed-count" title="Failed mails"></span>
+        </a>
         <p class="side-title">Resources</p>
         <a href="#compose" data-view="compose">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
@@ -173,6 +177,40 @@
               </div>
             </form>
             <aside class="card compose-side" id="compose-side" aria-live="polite"></aside>
+          </div>
+        </section>
+
+        <!-- Mail history -->
+        <section class="view card hidden" id="view-mails">
+          <div class="card-head">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input class="input" id="mail-search" type="search" placeholder="Search recipient, sender or subject" aria-label="Search mail">
+            </div>
+            <label class="inline-field">Sent with
+              <select class="select" id="mail-key"><option value="">All senders</option></select>
+            </label>
+          </div>
+          <div class="card-head mail-status-bar">
+            <div class="segmented" role="group" aria-label="Filter by status" id="mail-status">
+              <button type="button" data-filter="" aria-pressed="true">All <span class="seg-count" data-count="all"></span></button>
+              <button type="button" data-filter="queued" aria-pressed="false">Queued <span class="seg-count" data-count="queued"></span></button>
+              <button type="button" data-filter="sending" aria-pressed="false">Sending <span class="seg-count" data-count="sending"></span></button>
+              <button type="button" data-filter="sent" aria-pressed="false">Sent <span class="seg-count" data-count="sent"></span></button>
+              <button type="button" data-filter="failed" aria-pressed="false">Failed <span class="seg-count" data-count="failed"></span></button>
+              <button type="button" data-filter="simulated" aria-pressed="false">Simulated <span class="seg-count" data-count="simulated"></span></button>
+            </div>
+            <span class="spacer"></span>
+            <span class="muted small" id="mail-live"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Time</th><th>Sent with</th><th>From</th><th>To</th><th>Subject</th><th>Status</th><th class="right" aria-label="Actions"></th></tr></thead>
+              <tbody id="mails-body"></tbody>
+            </table>
+          </div>
+          <div class="load-more hidden" id="mail-more-wrap">
+            <button class="btn btn-secondary btn-sm" type="button" id="mail-more">Load older mail</button>
           </div>
         </section>
 
@@ -326,6 +364,33 @@
         <button class="btn btn-primary" type="submit" id="test-submit">Send test</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Mail detail -->
+  <dialog class="modal" id="mail-dialog" aria-labelledby="mail-title">
+    <div class="modal-head">
+      <div class="mail-head">
+        <h2 id="mail-title">Mail</h2>
+        <p id="mail-sub"></p>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-icon" type="button" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="mail-error" class="form-error hidden" role="alert"></div>
+      <dl class="mail-meta" id="mail-meta"></dl>
+      <p class="muted small hidden" id="mail-retry-note">Send again goes through the SMTP server the key uses now, and is not counted against its limits.</p>
+      <div class="request-block">
+        <span class="request-label">Message</span>
+        <pre class="mail-body" id="mail-body"></pre>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" type="button" data-close>Close</button>
+      <button class="btn btn-primary hidden" type="button" id="mail-retry">Send again</button>
+    </div>
   </dialog>
 
   <!-- Confirm -->

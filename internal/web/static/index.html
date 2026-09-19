@@ -104,13 +104,13 @@
           </article>
           <article class="feature">
             <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
-            <h3>IP allow lists</h3>
-            <p>Restrict each key to specific IP addresses or CIDR ranges, so a leaked key is useless elsewhere.</p>
+            <h3>Locked-down keys</h3>
+            <p>Restrict each key to specific IPs or CIDR ranges. Keys are stored encrypted with AES-256-GCM.</p>
           </article>
           <article class="feature">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-            <h3>Keys kept safe</h3>
-            <p>Keys are checked against SHA-256 hashes and stored encrypted with AES-256-GCM.</p>
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg></div>
+            <h3>Your own SMTP server</h3>
+            <p>Send through your own mail host, username and From address. Ask for it when you <a href="#request">request a key</a>.</p>
           </article>
           <article class="feature">
             <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>
@@ -184,6 +184,7 @@
             <li>Usually reviewed within one business day</li>
             <li>Limits sized to your expected volume</li>
             <li>Optional IP restrictions for extra safety</li>
+            <li>Optionally send through your own SMTP server</li>
           </ul>
           <p class="muted small">Already have a key? Jump to the <a href="/docs/#quickstart">quick start</a>.</p>
         </div>
@@ -220,6 +221,26 @@
             <label class="field"><span>Server IPs you will call from</span>
               <input class="input" name="caller_ips" maxlength="500" placeholder="203.0.113.5, 10.0.0.0/8">
               <span class="hint">Optional. We can lock your key to these addresses.</span></label>
+
+            <label class="checkbox">
+              <input id="smtp-toggle" type="checkbox" aria-controls="smtp-fields" aria-expanded="false">
+              <span><strong>Send through my own SMTP server</strong>Mail sent with your key goes out through your mail host and From address instead of ours.</span>
+            </label>
+            <div id="smtp-fields" class="stack hidden">
+              <div class="grid-2">
+                <label class="field"><span>SMTP host <span class="req">*</span></span>
+                  <input class="input" data-smtp="host" maxlength="253" autocomplete="off" placeholder="smtp.example.com"></label>
+                <label class="field"><span>Port</span>
+                  <input class="input" data-smtp="port" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="587"></label>
+              </div>
+              <div class="grid-2">
+                <label class="field"><span>SMTP username</span>
+                  <input class="input" data-smtp="username" maxlength="254" autocomplete="off" placeholder="you@example.com"></label>
+                <label class="field"><span>From address <span class="req">*</span></span>
+                  <input class="input" data-smtp="from" type="email" maxlength="254" autocomplete="off" placeholder="no-reply@example.com"></label>
+              </div>
+              <p class="muted small">Don't enter your SMTP password here. We will ask for it privately once your request is approved.</p>
+            </div>
             <label class="field"><span>Message or questions</span>
               <textarea class="textarea" name="message" maxlength="5000" placeholder="Anything else we should know: special limits, integration questions, timelines…"></textarea>
               <span class="hint">Optional. <span id="message-count">0</span> / 5000 characters.</span></label>

@@ -16,6 +16,8 @@ A queue-backed Go mail service that accepts outgoing mail jobs over HTTP and pro
 - Super API keys with no limits and no IP restriction
 - A dedicated SMTP server and From address per API key, with a default from the environment
 - PostgreSQL storage for API keys and a log of every authenticated request
+- Mail history: every mail's key, sender, recipient, subject, body and delivery status, with retry for failed mail
+- Automatic "thank you" reply to everyone who requests an API key
 
 ## Quick start (Docker Compose)
 
@@ -55,6 +57,8 @@ Access requests are stored in PostgreSQL and show up in the admin console under 
 - a limit of 3 accepted requests per IP per hour
 - a hidden honeypot field; submissions that fill it get a normal response but are dropped
 - JSON-only submissions, so other websites cannot post to it with a plain HTML form
+
+After a request is saved, the requester automatically gets a confirmation email ("Thank you for registering… we will review your request and reply very soon") through the default SMTP server from `SMTP_*`. It appears in **Mail history** as an auto-reply. Without a default SMTP server it is only simulated.
 - server-side validation: name, email, phone number (7–15 digits, optional `+` and separators) and use case (at least 20 characters) are required; organization, address, expected volume, server IPs and a free-text message or questions (up to 5,000 characters) are optional
 
 All pages ship with a strict Content Security Policy (`script-src 'self'`, no inline scripts or styles) and `X-Frame-Options: DENY`.
@@ -68,7 +72,17 @@ The admin UI at `/admin/` is protected by the super user account from `SUPERUSER
 - See each key's current usage against its limits, when and from which IP it was last used, and which IP created it.
 - Browse the request log (all keys or one key), filtered by status: time, key, IP, endpoint, mail count, status and message.
 - **Compose mail** (under Resources): send an email as any active API key. Pick a key, add up to 500 recipients (commas or new lines, `Name <email>` accepted), a subject and a message. The side panel shows the key's From address, SMTP server and remaining quota. The mail goes out exactly as if the key's client had sent it: through the key's SMTP server, counted against its limits, and logged as `/admin/compose`. The key's IP allow list doesn't apply, because the super user is sending. Disabled keys can't be used.
+- Browse the **mail history**: one row per mail, newest first, with the key (or auto-reply) it was sent with, From address and SMTP server, recipient, subject and status. Filter by key, status (queued, sending, sent, failed, simulated) or search recipient, sender and subject. Open a mail to see its full body, client IP, endpoint, attempts and error. **Send again** re-queues a failed mail through the SMTP server its key uses now; retries don't count against the key's limits. The list updates on its own while mail is in progress.
 - Review **access requests** from the public site. **Approve & create key** opens the key form prefilled from the request (name, contact, server IPs), then creates the key and marks the request approved in one step. **Reject** marks it rejected. A request can only be reviewed once.
+
+How mail moves through the service:
+
+1. A request (`/send`, `/send/bulk`, `/send/template`, Compose or the request auto-reply) is checked and counted against the key's limits.
+2. The message and one delivery per recipient are saved in the mail history as `queued`, then put on the in-memory queue.
+3. A worker picks it up (`sending`) and delivers it through the key's SMTP server or the default one: `sent`, or `failed` with the SMTP error. Without any SMTP server it is `simulated`.
+4. Mail still queued when the service stops is lost from memory; on the next start it is marked `failed` so it can be sent again.
+
+Mail history is kept when a key is deleted (the key's request log is not). It stores full message bodies, so treat the database as sensitive and remove old rows yourself if you need a retention limit.
 
 Security notes:
 
