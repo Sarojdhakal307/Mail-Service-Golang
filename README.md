@@ -386,3 +386,7 @@ SMTP_FROM=no-reply@example.com
 | `subject` | No | Email subject |
 | `body` | Yes | Email body/content |
 | `meta` | No | Object used for template replacement such as `{"name": ["Alice"]}` |
+
+## License
+
+[MIT](LICENSE) © 2026 Saroj Dhakal ([@sarojdhakal307](https://github.com/sarojdhakal307))
