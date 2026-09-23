@@ -19,13 +19,54 @@ A queue-backed Go mail service that accepts outgoing mail jobs over HTTP and pro
 - Mail history: every mail's key, sender, recipient, subject, body and delivery status, with retry for failed mail
 - Automatic "thank you" reply to everyone who requests an API key
 
-## Quick start (Docker Compose)
+## Getting started
+
+There are three ways to use Mail Service:
+
+| Option | Best for | You need |
+| --- | --- | --- |
+| [1. Use our hosted API](#option-1-use-our-hosted-api) | Sending mail right away, no server to run | An API key |
+| [2. Run the Docker image](#option-2-run-the-docker-image) | Your own server, without building anything | Docker |
+| [3. Clone and build](#option-3-clone-and-build) | Changing the code or contributing | Docker, or Go 1.22+ |
+
+### Option 1: Use our hosted API
+
+1. Open <HOSTED_URL> and fill in the **Request an API key** form. You get a confirmation email, and we reply once the request is reviewed.
+2. Send mail with your key:
+
+   ```bash
+   curl -X POST <HOSTED_URL>/send \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: <your-api-key>" \
+     -d '{"to": "user@example.com", "subject": "Hello", "body": "Sent through Mail Service"}'
+   ```
+
+The full API reference, with examples in cURL, Node.js, Python and Go, is at <HOSTED_URL>/docs/.
+
+### Option 2: Run the Docker image
+
+Every release is published to GitHub Packages as `ghcr.io/sarojdhakal307/mailservice`. Copy the files from [docker/use-image/](docker/use-image/) to your server, then:
 
 ```bash
+cp .env.example .env    # fill in passwords, keys and your SMTP server
+docker compose up -d
+```
+
+Choose the version with `MAILSERVICE_VERSION` in `.env` (`latest`, or a release such as `1.2.3`). See [docker/use-image/README.md](docker/use-image/README.md) for HTTPS, updates, backups and rollbacks.
+
+### Option 3: Clone and build
+
+```bash
+git clone https://github.com/sarojdhakal307/Mail-Service-Golang.git
+cd Mail-Service-Golang
 cp .env.example .env
-# edit .env: set POSTGRES_PASSWORD, SUPERUSER_PASSWORD and optionally SUPER_API_KEY
+# edit .env: set POSTGRES_PASSWORD, SUPERUSER_PASSWORD, API_KEY_ENCRYPTION_KEY and optionally SUPER_API_KEY
 docker compose up --build
 ```
+
+For a production server built from source, see [docker/server/](docker/server/).
+
+Once it is running (options 2 and 3):
 
 | Page | URL |
 | --- | --- |
@@ -304,6 +345,14 @@ A ready-to-import Postman collection is available at [postman_collection.json](p
 5. Open the collection's **Variables** tab and set `apiKey` to one of your `API_KEYS`. All mail requests send it as `X-API-Key`; the health check does not.
 
 ## Docker
+
+### Prebuilt image
+
+```bash
+docker pull ghcr.io/sarojdhakal307/mailservice:latest
+```
+
+Tags: `latest`, each release (`1.2.3`, `1.2`, `1`) and each commit (`sha-<short>`). To run it with a database, use [docker/use-image/](docker/use-image/).
 
 ### Build image
 
