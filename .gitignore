@@ -1,4 +1,7 @@
 .env
 .env.origin
 .env.prod
+.env.techyatra
+!.env.example
+.env.*
 Dockerdata/

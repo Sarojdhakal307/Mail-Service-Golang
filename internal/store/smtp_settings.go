@@ -15,6 +15,7 @@ type SMTPSettings struct {
 	Port        string `json:"port"`
 	Username    string `json:"username"`
 	From        string `json:"from"`
+	ReplyTo     string `json:"reply_to"`
 	HasPassword bool   `json:"has_password"`
 }
 
@@ -27,6 +28,7 @@ type SMTPInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	From     string `json:"from"`
+	ReplyTo  string `json:"reply_to"`
 }
 
 // enabled reports whether the input assigns an SMTP server.
@@ -42,6 +44,7 @@ func (in *SMTPInput) normalize() error {
 	in.Port = strings.TrimSpace(in.Port)
 	in.Username = strings.TrimSpace(in.Username)
 	in.From = strings.TrimSpace(in.From)
+	in.ReplyTo = strings.TrimSpace(in.ReplyTo)
 	if in.Host == "" {
 		*in = SMTPInput{}
 		return nil
@@ -65,6 +68,11 @@ func (in *SMTPInput) normalize() error {
 	if _, err := mail.ParseAddress(in.From); err != nil || len(in.From) > 320 {
 		return invalid("SMTP From must be an email address, e.g. no-reply@example.com or Acme <no-reply@example.com>")
 	}
+	if in.ReplyTo != "" {
+		if _, err := mail.ParseAddress(in.ReplyTo); err != nil || len(in.ReplyTo) > 320 {
+			return invalid("SMTP Reply-To must be an email address, e.g. support@example.com")
+		}
+	}
 	if in.Username == "" {
 		in.Password = ""
 	}
@@ -86,6 +94,7 @@ func (s *Store) SMTPConfig(key *APIKey) (*types.SMTPConfig, error) {
 		Port:     key.SMTP.Port,
 		Username: key.SMTP.Username,
 		From:     key.SMTP.From,
+		ReplyTo:  key.SMTP.ReplyTo,
 	}
 	if len(key.smtpPassword) > 0 {
 		password, err := s.cipher.Open(key.smtpPassword, smtpAAD(key.keyHash))

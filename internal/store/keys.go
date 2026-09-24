@@ -171,7 +171,7 @@ func displayPrefix(raw string) string {
 const keyColumns = `id, name, address, key_prefix, allowed_ips, is_super,
 	limit_hour, limit_day, limit_week, limit_month, active, created_ip,
 	created_at, last_used_at, last_used_ip, key_encrypted IS NOT NULL,
-	key_hash, smtp_host, smtp_port, smtp_username, smtp_from, smtp_password_encrypted`
+	key_hash, smtp_host, smtp_port, smtp_username, smtp_from, smtp_password_encrypted, smtp_reply_to`
 
 type scanner interface {
 	Scan(dest ...any) error
@@ -186,7 +186,7 @@ func scanKey(row scanner, extra ...any) (*APIKey, error) {
 	dest := []any{&k.ID, &k.Name, &k.Address, &k.KeyPrefix, pq.Array(&k.AllowedIPs), &k.IsSuper,
 		&k.Limits.Hour, &k.Limits.Day, &k.Limits.Week, &k.Limits.Month, &k.Active, &k.CreatedIP,
 		&k.CreatedAt, &lastUsed, &lastIP, &k.Recoverable,
-		&k.keyHash, &smtp.Host, &smtp.Port, &smtp.Username, &smtp.From, &k.smtpPassword}
+		&k.keyHash, &smtp.Host, &smtp.Port, &smtp.Username, &smtp.From, &k.smtpPassword, &smtp.ReplyTo}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
@@ -241,12 +241,12 @@ func (s *Store) createKey(ctx context.Context, q rowQueryer, in KeyInput, create
 	row := q.QueryRowContext(ctx, `
 		INSERT INTO api_keys (name, address, key_prefix, key_hash, allowed_ips, is_super,
 			limit_hour, limit_day, limit_week, limit_month, active, created_ip, key_encrypted,
-			smtp_host, smtp_port, smtp_username, smtp_from, smtp_password_encrypted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			smtp_host, smtp_port, smtp_username, smtp_from, smtp_password_encrypted, smtp_reply_to)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		RETURNING `+keyColumns,
 		in.Name, in.Address, displayPrefix(raw), hash, pq.Array(in.AllowedIPs), in.IsSuper,
 		in.Limits.Hour, in.Limits.Day, in.Limits.Week, in.Limits.Month, active, createdIP, encrypted,
-		smtp.Host, smtp.Port, smtp.Username, smtp.From, smtpPassword)
+		smtp.Host, smtp.Port, smtp.Username, smtp.From, smtpPassword, smtp.ReplyTo)
 	key, err := scanKey(row)
 	if err != nil {
 		return nil, "", err
@@ -392,12 +392,13 @@ func (s *Store) UpdateKey(ctx context.Context, id int64, in KeyInput) (*APIKey, 
 		UPDATE api_keys SET name = $2, address = $3, allowed_ips = $4, is_super = $5,
 			limit_hour = $6, limit_day = $7, limit_week = $8, limit_month = $9,
 			active = COALESCE($10, active),
-			smtp_host = $11, smtp_port = $12, smtp_username = $13, smtp_from = $14, smtp_password_encrypted = $15
+			smtp_host = $11, smtp_port = $12, smtp_username = $13, smtp_from = $14, smtp_password_encrypted = $15,
+			smtp_reply_to = $16
 		WHERE id = $1
 		RETURNING `+keyColumns,
 		id, in.Name, in.Address, pq.Array(in.AllowedIPs), in.IsSuper,
 		in.Limits.Hour, in.Limits.Day, in.Limits.Week, in.Limits.Month, in.Active,
-		smtp.Host, smtp.Port, smtp.Username, smtp.From, password))
+		smtp.Host, smtp.Port, smtp.Username, smtp.From, password, smtp.ReplyTo))
 	if err != nil {
 		return nil, err
 	}

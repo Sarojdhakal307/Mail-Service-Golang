@@ -305,12 +305,16 @@ func TestKeySMTPSettings(t *testing.T) {
 	if _, _, err := s.CreateKey(ctx, KeyInput{Name: "bad", SMTP: &SMTPInput{Host: "smtp.example.com", From: "not-an-email"}}, ""); err == nil {
 		t.Fatal("expected invalid From to be rejected")
 	}
+	if _, _, err := s.CreateKey(ctx, KeyInput{Name: "bad", SMTP: &SMTPInput{Host: "smtp.example.com", From: "a@b.com", ReplyTo: "nope"}}, ""); err == nil {
+		t.Fatal("expected invalid Reply-To to be rejected")
+	}
 	if _, _, err := s.CreateKey(ctx, KeyInput{Name: "bad", SMTP: &SMTPInput{Host: "smtp.example.com", Port: "99999", From: "a@b.com"}}, ""); err == nil {
 		t.Fatal("expected invalid port to be rejected")
 	}
 
 	key, _, err := s.CreateKey(ctx, KeyInput{Name: "smtp", SMTP: &SMTPInput{
 		Host: " smtp.example.com ", Username: "user@example.com", Password: "s3cret", From: "Acme <no-reply@example.com>",
+		ReplyTo: " help@example.com ",
 	}}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -324,7 +328,7 @@ func TestKeySMTPSettings(t *testing.T) {
 	}
 
 	cfg, err := s.SMTPConfig(key)
-	if err != nil || cfg.Password != "s3cret" || cfg.From != "Acme <no-reply@example.com>" {
+	if err != nil || cfg.Password != "s3cret" || cfg.From != "Acme <no-reply@example.com>" || cfg.ReplyTo != "help@example.com" {
 		t.Fatalf("SMTPConfig: %+v, %v", cfg, err)
 	}
 

@@ -14,7 +14,7 @@ import (
 
 func TestBuildMessageBlocksHeaderInjection(t *testing.T) {
 	from, _ := mail.ParseAddress("Acme <no-reply@example.com>")
-	raw := string(buildMessage(from, "ada@example.com", "Hi\r\nBcc: victim@example.com", "Hello"))
+	raw := string(buildMessage(from, nil, "ada@example.com", "Hi\r\nBcc: victim@example.com", "Hello"))
 	head := raw[:strings.Index(raw, "\r\n\r\n")]
 	for _, line := range strings.Split(head, "\r\n") {
 		if strings.HasPrefix(strings.ToLower(line), "bcc:") {
@@ -25,6 +25,18 @@ func TestBuildMessageBlocksHeaderInjection(t *testing.T) {
 		if !strings.Contains(head, want) {
 			t.Errorf("missing header %q in:\n%s", want, head)
 		}
+	}
+	if strings.Contains(head, "Reply-To:") {
+		t.Errorf("unexpected Reply-To header in:\n%s", head)
+	}
+}
+
+func TestBuildMessageAddsReplyTo(t *testing.T) {
+	from, _ := mail.ParseAddress("noreply@example.com")
+	replyTo, _ := mail.ParseAddress("Support <support@example.com>")
+	raw := string(buildMessage(from, replyTo, "ada@example.com", "Hi", "Hello"))
+	if !strings.Contains(raw, "\r\nReply-To: \"Support\" <support@example.com>\r\n") {
+		t.Fatalf("missing Reply-To header:\n%s", raw)
 	}
 }
 
@@ -84,7 +96,7 @@ func fakeSMTP(t *testing.T) (port string, data <-chan string) {
 
 func TestSMTPMailerDeliversThroughConfiguredServer(t *testing.T) {
 	port, data := fakeSMTP(t)
-	cfg := types.SMTPConfig{Host: "127.0.0.1", Port: port, From: "Key Owner <owner@example.com>"}
+	cfg := types.SMTPConfig{Host: "127.0.0.1", Port: port, From: "Key Owner <owner@example.com>", ReplyTo: "help@example.com"}
 	msg := types.MailMessage{To: "ada@example.com", Subject: "Héllo", Body: "Line one\nLine two"}
 
 	if err := NewSMTPMailerFromConfig(cfg).Send(context.Background(), msg); err != nil {
@@ -94,6 +106,9 @@ func TestSMTPMailerDeliversThroughConfiguredServer(t *testing.T) {
 	case got := <-data:
 		if !strings.Contains(got, "From: \"Key Owner\" <owner@example.com>") || !strings.Contains(got, "Line one\r\nLine two") {
 			t.Fatalf("unexpected message:\n%s", got)
+		}
+		if !strings.Contains(got, "Reply-To: <help@example.com>") {
+			t.Fatalf("missing Reply-To:\n%s", got)
 		}
 		if !strings.Contains(got, "Subject: =?utf-8?q?H=C3=A9llo?=") {
 			t.Fatalf("subject not encoded:\n%s", got)

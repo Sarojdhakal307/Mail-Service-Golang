@@ -407,6 +407,7 @@ function openKeyDialog(mode) {
       f.smtp_port.value = k.smtp.port;
       f.smtp_username.value = k.smtp.username;
       f.smtp_from.value = k.smtp.from;
+      f.smtp_reply_to.value = k.smtp.reply_to || "";
     }
   } else if (mode.type === "approve") {
     const r = mode.request;
@@ -463,6 +464,7 @@ function formInput() {
       username: f.smtp_username.value,
       password: f.smtp_password.value,
       from: f.smtp_from.value,
+      reply_to: f.smtp_reply_to.value,
     } : null,
   };
 }
@@ -641,6 +643,7 @@ function renderComposeSide() {
       el("div", {}, el("strong", { text: key.name }), el("code", { text: key.key_prefix + "…" }))),
     el("dl", { class: "side-rows" },
       el("div", {}, el("dt", { text: "From" }), el("dd", { text: key.smtp ? key.smtp.from : "Default From address (service settings)" })),
+      key.smtp && key.smtp.reply_to && el("div", {}, el("dt", { text: "Reply-To" }), el("dd", { text: key.smtp.reply_to })),
       el("div", {}, el("dt", { text: "SMTP server" }), el("dd", { class: key.smtp ? "mono" : "", text: key.smtp ? key.smtp.host + ":" + key.smtp.port : "Default server" })),
       el("div", {}, el("dt", { text: "Limits" }), quota)),
     !key.is_super && el("div", { class: "usage-box" }, usageCell(key)),

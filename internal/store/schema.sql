@@ -68,6 +68,7 @@ ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_port TEXT NOT NULL DEFAULT ''
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_username TEXT NOT NULL DEFAULT '';
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_from TEXT NOT NULL DEFAULT '';
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_password_encrypted BYTEA;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS smtp_reply_to TEXT NOT NULL DEFAULT '';
 
 -- Mail history: one row per message, and one delivery row per recipient with its status.
 -- Rows are kept when the sending key is deleted; key_name keeps the name it had.

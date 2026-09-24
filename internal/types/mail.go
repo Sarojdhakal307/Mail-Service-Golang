@@ -19,6 +19,8 @@ type SMTPConfig struct {
 	Username string
 	Password string
 	From     string
+	// ReplyTo is where replies go, or empty for the From address.
+	ReplyTo string
 }
 
 type SendRequest struct {

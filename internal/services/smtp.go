@@ -34,6 +34,7 @@ func DefaultSMTPConfig() *types.SMTPConfig {
 		Username: os.Getenv("SMTP_USERNAME"),
 		Password: os.Getenv("SMTP_PASSWORD"),
 		From:     strings.TrimSpace(os.Getenv("SMTP_FROM")),
+		ReplyTo:  strings.TrimSpace(os.Getenv("SMTP_REPLY_TO")),
 	}
 	if cfg.Host == "" || cfg.Port == "" || cfg.From == "" {
 		return nil
@@ -82,6 +83,12 @@ func (m *SMTPMailer) Send(ctx context.Context, msg types.MailMessage) error {
 	fromAddr, err := mail.ParseAddress(cfg.From)
 	if err != nil {
 		return fmt.Errorf("invalid From address %q: %w", cfg.From, err)
+	}
+	var replyTo *mail.Address
+	if cfg.ReplyTo != "" {
+		if replyTo, err = mail.ParseAddress(cfg.ReplyTo); err != nil {
+			return fmt.Errorf("invalid Reply-To address %q: %w", cfg.ReplyTo, err)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, sessionTimeout)
@@ -139,7 +146,7 @@ func (m *SMTPMailer) Send(ctx context.Context, msg types.MailMessage) error {
 	if err != nil {
 		return fmt.Errorf("DATA rejected: %w", err)
 	}
-	if _, err := w.Write(buildMessage(fromAddr, recipient, msg.Subject, msg.Body)); err != nil {
+	if _, err := w.Write(buildMessage(fromAddr, replyTo, recipient, msg.Subject, msg.Body)); err != nil {
 		return fmt.Errorf("write message: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -149,13 +156,16 @@ func (m *SMTPMailer) Send(ctx context.Context, msg types.MailMessage) error {
 }
 
 // buildMessage renders a plain-text UTF-8 message. Header values have line breaks removed
-// so user input cannot inject extra headers.
-func buildMessage(from *mail.Address, to, subject, body string) []byte {
+// so user input cannot inject extra headers. A nil replyTo omits the Reply-To header.
+func buildMessage(from, replyTo *mail.Address, to, subject, body string) []byte {
 	var buf bytes.Buffer
 	header := func(k, v string) {
 		buf.WriteString(k + ": " + stripCRLF(v) + "\r\n")
 	}
 	header("From", from.String())
+	if replyTo != nil {
+		header("Reply-To", replyTo.String())
+	}
 	header("To", to)
 	header("Subject", mime.QEncoding.Encode("utf-8", stripCRLF(subject)))
 	header("Date", time.Now().Format(time.RFC1123Z))

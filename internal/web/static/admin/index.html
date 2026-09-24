@@ -315,6 +315,9 @@
             <label class="field"><span>From address <span class="req">*</span></span>
               <input class="input" name="smtp_from" maxlength="320" placeholder="Acme &lt;no-reply@acme.com&gt;" autocomplete="off">
               <span class="hint">The sender recipients see. Most providers require it to match the account or a verified domain.</span></label>
+            <label class="field"><span>Reply-To address</span>
+              <input class="input" name="smtp_reply_to" maxlength="320" placeholder="support@acme.com" autocomplete="off">
+              <span class="hint">Where replies go. Leave blank to reply to the From address.</span></label>
           </div>
         </fieldset>
         <div id="key-form-error" class="form-error hidden" role="alert"></div>

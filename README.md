@@ -405,6 +405,7 @@ SMTP_PORT=587
 SMTP_USERNAME=your-user
 SMTP_PASSWORD=your-password
 SMTP_FROM=no-reply@example.com
+SMTP_REPLY_TO=support@example.com
 ```
 
 ### Notes
@@ -414,6 +415,7 @@ SMTP_FROM=no-reply@example.com
 - `SMTP_USERNAME` is usually the full email address.
 - `SMTP_PASSWORD` is the mailbox password or app password.
 - `SMTP_FROM` is the sender address shown to recipients.
+- `SMTP_REPLY_TO` is optional: the address replies go to, such as a real inbox when `SMTP_FROM` is a no-reply address. Each API key with its own SMTP server can set its own Reply-To in the admin UI.
 
 ## Request and response summary
 
